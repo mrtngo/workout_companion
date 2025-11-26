@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { storage, UserProfile } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
-import { ArrowLeft, Save, Edit2, User, Calendar, Weight, Target, Activity } from "lucide-react";
+import { ArrowLeft, Save, Edit2, User, Calendar, Weight, Target, Activity, Database } from "lucide-react";
+import Link from "next/link";
 
 export default function ProfilePage() {
     const router = useRouter();
@@ -360,6 +361,27 @@ export default function ProfilePage() {
                     </CardContent>
                 </Card>
             )}
+
+            {/* Developer Tools */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Developer Tools</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <Link href="/admin/seed">
+                        <Button
+                            variant="outline"
+                            className="w-full"
+                        >
+                            <Database className="h-4 w-4 mr-2" />
+                            Seed Mock Data
+                        </Button>
+                    </Link>
+                    <p className="text-xs text-muted-foreground">
+                        Generate 30 days of workout and meal data to test LLM suggestions
+                    </p>
+                </CardContent>
+            </Card>
 
             {/* Logout Button */}
             <Card>
