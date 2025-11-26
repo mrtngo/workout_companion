@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Don't use static export since we have API routes
+  // We'll deploy to Firebase Functions + Hosting
 };
 
 export default nextConfig;

@@ -191,7 +191,7 @@ export default function LogWorkoutPage() {
                                 {groupedExercises[groupName].map((exercise) => {
                                     const globalIndex = exercises.findIndex(e => e.id === exercise.id);
                                     return (
-                                        <Card key={exercise.id}>
+                                        <Card key={exercise.id} className="mb-4">
                                             <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
                                                 <div className="flex-1 space-y-2">
                                                     <div className="flex items-center gap-2">
@@ -326,6 +326,7 @@ export default function LogWorkoutPage() {
                     >
                         <Plus className="h-4 w-4 mr-2" /> Add Lower Body
                     </Button>
+                </div>
                 </div>
             </div>
 

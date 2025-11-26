@@ -5,9 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { Activity, Flame, Trophy, Sparkles, Send, LogOut, CheckCircle2, Dumbbell } from "lucide-react";
-import { generateAvatarUrl } from "@/lib/avatar";
-import Link from "next/link";
+import { Activity, Flame, Trophy, Sparkles, Send, LogOut, CheckCircle2, Dumbbell, User } from "lucide-react";
 import { storage, WorkoutOfDay, UserProfile } from "@/lib/storage";
 import { aiLogic } from "@/lib/ai-logic";
 import { useRouter } from "next/navigation";
@@ -23,7 +21,6 @@ export default function Home() {
   const [workoutOfDay, setWorkoutOfDay] = useState<WorkoutOfDay | null>(null);
   const [isLoadingWOD, setIsLoadingWOD] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string>("");
 
   useEffect(() => {
     if (!user) return;
@@ -86,12 +83,6 @@ export default function Home() {
 
     // Generate suggestion
     setSuggestion(aiLogic.generateSuggestion());
-
-    // Generate avatar
-    if (user) {
-      const seed = user.email || user.uid;
-      setAvatarUrl(generateAvatarUrl(seed));
-    }
   }, [user]);
 
   const handleQuickLog = async (e: React.FormEvent) => {
@@ -167,17 +158,9 @@ export default function Home() {
         </div>
         <div className="flex items-center gap-2">
           <Link href="/profile">
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt="Profile"
-                className="h-10 w-10 rounded-full border-2 border-primary/20 cursor-pointer hover:border-primary/40 transition-colors"
-              />
-            ) : (
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <Trophy className="h-6 w-6 text-primary" />
-              </div>
-            )}
+            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary/20 transition-colors cursor-pointer">
+              <User className="h-6 w-6 text-primary" />
+            </div>
           </Link>
         </div>
       </header>

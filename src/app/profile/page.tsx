@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { storage, UserProfile } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
-import { generateAvatarUrl } from "@/lib/avatar";
 import { ArrowLeft, Save, Edit2, User, Calendar, Weight, Target, Activity } from "lucide-react";
 
 export default function ProfilePage() {
@@ -18,7 +17,6 @@ export default function ProfilePage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const [avatarUrl, setAvatarUrl] = useState<string>("");
 
     const [formData, setFormData] = useState({
         age: "",
@@ -52,13 +50,6 @@ export default function ProfilePage() {
         };
 
         loadProfile();
-    }, [user]);
-
-    useEffect(() => {
-        if (user) {
-            const seed = user.email || user.uid;
-            setAvatarUrl(generateAvatarUrl(seed));
-        }
     }, [user]);
 
     const handleInputChange = (field: string, value: string) => {
@@ -168,11 +159,9 @@ export default function ProfilePage() {
                 <CardContent className="pt-6">
                     <div className="flex flex-col items-center space-y-4">
                         <div className="relative">
-                            <img
-                                src={avatarUrl}
-                                alt="Avatar"
-                                className="w-24 h-24 rounded-full border-4 border-primary/20"
-                            />
+                            <div className="w-24 h-24 rounded-full border-4 border-primary/20 bg-primary/10 flex items-center justify-center">
+                                <User className="h-12 w-12 text-primary" />
+                            </div>
                         </div>
                         <div className="text-center">
                             <h2 className="text-xl font-semibold">
