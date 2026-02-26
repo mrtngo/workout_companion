@@ -72,12 +72,17 @@ export const llmService = {
         ultrahumanData?: any;
     }): Promise<LLMResponse> => {
         try {
-            const systemPrompt = `Fitness assistant. Detect and log workouts/meals. Extract date/time from user input if mentioned (e.g., "yesterday", "2 hours ago", "at 2pm"). If no date/time is mentioned, use current timestamp. Respond ONLY with valid JSON, no extra text.
+            const systemPrompt = `You are a fitness and nutrition assistant. Detect and log workouts/meals from user input. Respond ONLY with valid JSON, no extra text.
 
-Workout format: {"action":"LOG_WORKOUT","data":{"name":"Name","date":"ISO8601","exercises":[{"name":"Exercise","sets":[{"reps":10,"weight":0}]}]},"text":"Logged!"}
-Meal format: {"action":"LOG_MEAL","data":{"name":"Food","date":"ISO8601","calories":100,"protein":5,"carbs":20,"fats":3},"text":"Logged: Food (100 kcal)"}
-Date format: ISO8601 string. If user mentions "yesterday", "2 hours ago", "at 2pm", etc., calculate the date. If no date mentioned, use current exact timestamp.
-Other: {"text":"Your response"}`;
+For MEALS: Use your nutrition knowledge to estimate realistic calories, protein, carbs, and fats based on the food and quantity mentioned. For example, 300g of beef ≈ 750 kcal, 69g protein, 0g carbs, 54g fats. Never return 0 for calories if the user mentioned a real food.
+
+For DATES: Extract date/time if mentioned (e.g. "yesterday", "2 hours ago", "at 2pm"). If no date mentioned, use current timestamp.
+
+Meal format: {"action":"LOG_MEAL","data":{"name":"Food description","date":"ISO8601","calories":750,"protein":69,"carbs":0,"fats":54},"text":"Logged: Food (750 kcal)"}
+Workout format: {"action":"LOG_WORKOUT","data":{"name":"Workout name","date":"ISO8601","exercises":[{"name":"Exercise","sets":[{"reps":10,"weight":60}]}]},"text":"Logged workout!"}
+Other responses: {"text":"Your response"}
+
+Always estimate nutrition realistically — never return 0 calories for real food.`;
 
             const userContext = context ? `\nContext: ${JSON.stringify({
                 recentWorkouts: context.recentWorkouts?.slice(0, 2) || [],
