@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Bot, User, Plus, MessageSquare, ChevronLeft, ChevronRight, PanelLeftClose } from "lucide-react";
+import { Send, Bot, User, Plus, MessageSquare, ChevronLeft, ChevronRight, Camera, X } from "lucide-react";
 import { aiLogic, AIResponse } from "@/lib/ai-logic";
 import { storage, Conversation, ConversationMessage } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
@@ -15,6 +15,7 @@ interface Message {
     role: "user" | "assistant";
     content: string;
     videoUrl?: string;
+    imageUrl?: string;
 }
 
 export default function AssistantPage() {
@@ -27,6 +28,10 @@ export default function AssistantPage() {
     const [isLoadingConversations, setIsLoadingConversations] = useState(true);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const scrollAreaRef = useRef<HTMLDivElement>(null);
+    const imageInputRef = useRef<HTMLInputElement>(null);
+    const [pendingImage, setPendingImage] = useState<{
+        base64: string; mimeType: string; previewUrl: string;
+    } | null>(null);
 
     // Load conversations on mount
     useEffect(() => {
@@ -74,6 +79,7 @@ export default function AssistantPage() {
                     role: msg.role,
                     content: msg.content,
                     videoUrl: msg.videoUrl,
+                    imageUrl: msg.imageUrl,
                 })));
             } catch (error) {
                 console.error("Error loading messages:", error);
@@ -121,6 +127,7 @@ export default function AssistantPage() {
                 role: message.role,
                 content: message.content,
                 videoUrl: message.videoUrl,
+                imageUrl: message.imageUrl,
                 timestamp: new Date().toISOString(),
             });
             console.log("Message saved successfully:", message.id);
@@ -130,18 +137,56 @@ export default function AssistantPage() {
         }
     };
 
-    const handleSend = async () => {
-        if (!input.trim() || !user || !currentConversationId) return;
+    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
 
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const img = new Image();
+            img.onload = () => {
+                const maxSize = 1024;
+                let { width, height } = img;
+                if (width > maxSize || height > maxSize) {
+                    if (width > height) {
+                        height = Math.round((height * maxSize) / width);
+                        width = maxSize;
+                    } else {
+                        width = Math.round((width * maxSize) / height);
+                        height = maxSize;
+                    }
+                }
+                const canvas = document.createElement("canvas");
+                canvas.width = width;
+                canvas.height = height;
+                canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+                const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+                const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
+                setPendingImage({ base64, mimeType: "image/jpeg", previewUrl: dataUrl });
+            };
+            img.src = ev.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+        // Reset input so same file can be selected again
+        e.target.value = "";
+    };
+
+    const handleSend = async () => {
+        if (!input.trim() && !pendingImage) return;
+        if (!user || !currentConversationId) return;
+
+        const capturedImage = pendingImage;
         const userMessage: Message = {
             id: Date.now().toString(),
             role: "user",
             content: input,
+            imageUrl: capturedImage?.previewUrl,
         };
 
         setMessages((prev) => [...prev, userMessage]);
         await saveMessageToFirestore(userMessage);
         setInput("");
+        setPendingImage(null);
         setIsLoading(true);
 
         let videoUrl: string | undefined = undefined;
@@ -184,7 +229,8 @@ export default function AssistantPage() {
                         context: {
                             recentWorkouts: recentWorkouts.slice(0, 2),
                             recentMeals: recentMeals.slice(0, 2),
-                        }
+                        },
+                        ...(capturedImage && { imageData: { base64: capturedImage.base64, mimeType: capturedImage.mimeType } }),
                     }),
                     signal: controller.signal,
                 });
@@ -392,7 +438,16 @@ export default function AssistantPage() {
                                         : "bg-muted"
                                         }`}
                                 >
-                                    <div className="text-sm prose dark:prose-invert" dangerouslySetInnerHTML={{ __html: message.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                                    {message.imageUrl && (
+                                        <img
+                                            src={message.imageUrl}
+                                            alt="Meal photo"
+                                            className="rounded-md mb-2 max-w-full max-h-48 object-cover"
+                                        />
+                                    )}
+                                    {message.content && (
+                                        <div className="text-sm prose dark:prose-invert" dangerouslySetInnerHTML={{ __html: message.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                                    )}
                                     {message.videoUrl && (
                                         <div className="mt-3 rounded-md overflow-hidden bg-black aspect-video relative">
                                             <iframe
@@ -427,7 +482,7 @@ export default function AssistantPage() {
                 </ScrollArea>
 
                 {/* Fixed Input Area - Pinned above bottom nav */}
-                <div 
+                <div
                     className={cn(
                         "fixed p-4 border-t bg-background z-10 transition-all duration-300",
                         "bottom-20 right-0"
@@ -436,6 +491,22 @@ export default function AssistantPage() {
                         left: isSidebarOpen ? '256px' : '0'
                     }}
                 >
+                    {pendingImage && (
+                        <div className="relative inline-block mb-2">
+                            <img
+                                src={pendingImage.previewUrl}
+                                alt="Pending meal photo"
+                                className="h-16 w-16 rounded-md object-cover"
+                            />
+                            <button
+                                onClick={() => setPendingImage(null)}
+                                className="absolute -top-1 -right-1 bg-background border rounded-full p-0.5"
+                                type="button"
+                            >
+                                <X className="h-3 w-3" />
+                            </button>
+                        </div>
+                    )}
                     <form
                         onSubmit={(e) => {
                             e.preventDefault();
@@ -443,6 +514,23 @@ export default function AssistantPage() {
                         }}
                         className="flex gap-2"
                     >
+                        <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            ref={imageInputRef}
+                            onChange={handleImageSelect}
+                            className="hidden"
+                        />
+                        <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            disabled={isLoading || !currentConversationId}
+                            onClick={() => imageInputRef.current?.click()}
+                        >
+                            <Camera className="h-4 w-4" />
+                        </Button>
                         <Input
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
@@ -450,7 +538,7 @@ export default function AssistantPage() {
                             disabled={isLoading || !currentConversationId}
                             className="flex-1"
                         />
-                        <Button type="submit" size="icon" disabled={isLoading || !input.trim() || !currentConversationId}>
+                        <Button type="submit" size="icon" disabled={isLoading || (!input.trim() && !pendingImage) || !currentConversationId}>
                             <Send className="h-4 w-4" />
                         </Button>
                     </form>

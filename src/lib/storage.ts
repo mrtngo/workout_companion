@@ -50,6 +50,7 @@ export interface ConversationMessage {
     role: "user" | "assistant";
     content: string;
     videoUrl?: string;
+    imageUrl?: string;
     timestamp: string; // ISO string
 }
 
@@ -374,6 +375,7 @@ export const storage = {
                     role: data.role,
                     content: data.content || "",
                     videoUrl: data.videoUrl,
+                    imageUrl: data.imageUrl,
                     timestamp: data.timestamp?.toDate?.().toISOString() || data.timestamp || new Date().toISOString(),
                 };
             }) as ConversationMessage[];
@@ -409,6 +411,9 @@ export const storage = {
             // Only include videoUrl if it exists
             if (message.videoUrl) {
                 messageData.videoUrl = message.videoUrl;
+            }
+            if (message.imageUrl) {
+                messageData.imageUrl = message.imageUrl;
             }
             
             await addDoc(messagesRef, messageData);

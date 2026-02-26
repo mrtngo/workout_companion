@@ -9,6 +9,7 @@ export interface LLMResponse {
 
 async function callGeminiWithRetry(
     prompt: string,
+    imageData?: { base64: string; mimeType: string },
     maxRetries: number = AVAILABLE_MODELS.length
 ): Promise<{ text: string }> {
     let lastError: any = null;
@@ -22,13 +23,18 @@ async function callGeminiWithRetry(
         }
 
         try {
+            const parts: any[] = [{ text: prompt }];
+            if (imageData) {
+                parts.push({ inlineData: { mimeType: imageData.mimeType, data: imageData.base64 } });
+            }
+
             const res = await fetch(
                 `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`,
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
+                        contents: [{ parts }],
                     }),
                 }
             );
@@ -70,13 +76,23 @@ export const llmService = {
         recentWorkouts?: Workout[];
         recentMeals?: Meal[];
         ultrahumanData?: any;
-    }): Promise<LLMResponse> => {
+    }, imageData?: { base64: string; mimeType: string }): Promise<LLMResponse> => {
         try {
-            const systemPrompt = `You are a fitness and nutrition assistant. Detect and log workouts/meals from user input. Respond ONLY with valid JSON, no extra text.
+            let prompt: string;
+
+            if (imageData) {
+                const now = new Date().toISOString();
+                prompt = `You are a nutrition expert. Look at the food in this image. Identify all dishes/items visible and estimate the total calories, protein, carbs, and fats for the whole meal. Respond ONLY with JSON:
+{"action":"LOG_MEAL","data":{"name":"<description>","date":"${now}","calories":N,"protein":N,"carbs":N,"fats":N},"text":"Logged: <description> (N kcal)"}`;
+            } else {
+                const now = new Date().toISOString();
+                const systemPrompt = `You are a fitness and nutrition assistant. Detect and log workouts/meals from user input. Respond ONLY with valid JSON, no extra text.
+
+Current date/time: ${now}
 
 For MEALS: Use your nutrition knowledge to estimate realistic calories, protein, carbs, and fats based on the food and quantity mentioned. For example, 300g of beef ≈ 750 kcal, 69g protein, 0g carbs, 54g fats. Never return 0 for calories if the user mentioned a real food.
 
-For DATES: Extract date/time if mentioned (e.g. "yesterday", "2 hours ago", "at 2pm"). If no date mentioned, use current timestamp.
+For DATES: Extract date/time if mentioned (e.g. "yesterday", "2 hours ago", "at 2pm"). If no date mentioned, use exactly: "${now}".
 
 Meal format: {"action":"LOG_MEAL","data":{"name":"Food description","date":"ISO8601","calories":750,"protein":69,"carbs":0,"fats":54},"text":"Logged: Food (750 kcal)"}
 Workout format: {"action":"LOG_WORKOUT","data":{"name":"Workout name","date":"ISO8601","exercises":[{"name":"Exercise","sets":[{"reps":10,"weight":60}]}]},"text":"Logged workout!"}
@@ -84,14 +100,15 @@ Other responses: {"text":"Your response"}
 
 Always estimate nutrition realistically — never return 0 calories for real food.`;
 
-            const userContext = context ? `\nContext: ${JSON.stringify({
-                recentWorkouts: context.recentWorkouts?.slice(0, 2) || [],
-                recentMeals: context.recentMeals?.slice(0, 2) || []
-            })}` : "";
+                const userContext = context ? `\nContext: ${JSON.stringify({
+                    recentWorkouts: context.recentWorkouts?.slice(0, 2) || [],
+                    recentMeals: context.recentMeals?.slice(0, 2) || []
+                })}` : "";
 
-            const response = await callGeminiWithRetry(
-                systemPrompt + "\nUser: " + userInput + userContext
-            );
+                prompt = systemPrompt + "\nUser: " + userInput + userContext;
+            }
+
+            const response = await callGeminiWithRetry(prompt, imageData);
 
             const responseText = response.text;
 
