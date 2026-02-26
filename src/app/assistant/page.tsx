@@ -199,6 +199,13 @@ export default function AssistantPage() {
                 throw fetchError;
             }
 
+            // Check if response is ok before parsing
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+                console.error("API error:", response.status, errorData);
+                throw new Error(errorData.error || `API error: ${response.status}`);
+            }
+
             const data = await response.json();
 
             // If API returns error, fall back to mock AI
@@ -227,15 +234,19 @@ export default function AssistantPage() {
 
             // Handle Actions from real API
             if (data.action === "LOG_MEAL" && data.data && user) {
+                // Use date from LLM if provided, otherwise use current exact timestamp
+                const mealDate = data.data.date || new Date().toISOString();
                 await storage.saveMeal(user.uid, {
                     id: Math.random().toString(36).substring(2, 9),
-                    date: new Date().toISOString(),
+                    date: mealDate,
                     ...data.data,
                 });
             } else if (data.action === "LOG_WORKOUT" && data.data && user) {
+                // Use date from LLM if provided, otherwise use current exact timestamp
+                const workoutDate = data.data.date || new Date().toISOString();
                 await storage.saveWorkout(user.uid, {
                     id: Math.random().toString(36).substring(2, 9),
-                    date: new Date().toISOString(),
+                    date: workoutDate,
                     ...data.data,
                 });
             }

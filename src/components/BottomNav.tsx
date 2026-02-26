@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Dumbbell, Utensils, MessageSquare, User } from "lucide-react";
+import { Home, Dumbbell, Utensils, MessageSquare, User, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function BottomNav() {
@@ -18,12 +18,13 @@ export function BottomNav() {
     { href: "/workout", label: "Workout", icon: Dumbbell },
     { href: "/nutrition", label: "Nutrition", icon: Utensils },
     { href: "/assistant", label: "Assistant", icon: MessageSquare },
+    { href: "/progress", label: "Progress", icon: TrendingUp },
     { href: "/profile", label: "Profile", icon: User },
   ];
 
   return (
     <div className="fixed bottom-0 left-0 right-0 border-t bg-background p-2 pb-safe">
-      <nav className="flex justify-around">
+      <nav className="flex justify-between px-1">
         {links.map((link) => {
           const Icon = link.icon;
           const isActive = pathname === link.href;

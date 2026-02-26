@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,9 @@ const generateId = () => Math.random().toString(36).substring(2, 9);
 
 export default function LogMealPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { user } = useAuth();
+    const [mealId, setMealId] = useState<string | null>(null);
     const [name, setName] = useState("");
     const [calories, setCalories] = useState("");
     const [protein, setProtein] = useState("");
@@ -22,6 +24,32 @@ export default function LogMealPage() {
     const [fats, setFats] = useState("");
     // Default to today's date
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+    useEffect(() => {
+        // Check if we're in edit mode
+        const isEdit = searchParams.get('edit') === 'true';
+        if (isEdit) {
+            const editMealStr = sessionStorage.getItem('editMeal');
+            if (editMealStr) {
+                try {
+                    const editMeal: Meal = JSON.parse(editMealStr);
+                    setMealId(editMeal.id);
+                    setName(editMeal.name);
+                    setCalories(editMeal.calories.toString());
+                    setProtein(editMeal.protein.toString());
+                    setCarbs(editMeal.carbs.toString());
+                    setFats(editMeal.fats.toString());
+                    // Extract date from ISO string
+                    const mealDate = new Date(editMeal.date);
+                    setDate(mealDate.toISOString().split('T')[0]);
+                    // Clear sessionStorage after loading
+                    sessionStorage.removeItem('editMeal');
+                } catch (error) {
+                    console.error('Error parsing meal data:', error);
+                }
+            }
+        }
+    }, [searchParams]);
 
     const handleSave = async () => {
         if (!name || !calories || !user) return;
@@ -32,7 +60,7 @@ export default function LogMealPage() {
         selectedDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
 
         const meal: Meal = {
-            id: generateId(),
+            id: mealId || generateId(),
             date: selectedDate.toISOString(),
             name,
             calories: Number(calories),

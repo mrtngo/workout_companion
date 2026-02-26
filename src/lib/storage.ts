@@ -5,6 +5,7 @@ import {
     addDoc,
     getDoc,
     updateDoc,
+    deleteDoc,
     query,
     orderBy,
     where,
@@ -126,12 +127,69 @@ export const storage = {
         try {
             const workoutsRef = getWorkoutsCollection(userId);
             const { id, ...workoutData } = workout;
-            await addDoc(workoutsRef, {
+            if (id) {
+                // Update existing workout
+                const workoutDoc = doc(workoutsRef, id);
+                await updateDoc(workoutDoc, {
+                    ...workoutData,
+                    date: Timestamp.fromDate(new Date(workout.date)),
+                });
+            } else {
+                // Create new workout
+                await addDoc(workoutsRef, {
+                    ...workoutData,
+                    date: Timestamp.fromDate(new Date(workout.date)),
+                });
+            }
+        } catch (error) {
+            console.error("Error saving workout:", error);
+            throw error;
+        }
+    },
+
+    updateWorkout: async (userId: string, workout: Workout): Promise<void> => {
+        if (!userId || !workout.id) throw new Error("User ID and workout ID are required");
+        
+        try {
+            const workoutsRef = getWorkoutsCollection(userId);
+            const workoutDoc = doc(workoutsRef, workout.id);
+            const { id, ...workoutData } = workout;
+            await updateDoc(workoutDoc, {
                 ...workoutData,
                 date: Timestamp.fromDate(new Date(workout.date)),
             });
         } catch (error) {
-            console.error("Error saving workout:", error);
+            console.error("Error updating workout:", error);
+            throw error;
+        }
+    },
+
+    deleteWorkout: async (userId: string, workoutId: string): Promise<void> => {
+        if (!userId || !workoutId) throw new Error("User ID and workout ID are required");
+        
+        try {
+            const workoutsRef = getWorkoutsCollection(userId);
+            const workoutDoc = doc(workoutsRef, workoutId);
+            await deleteDoc(workoutDoc);
+        } catch (error) {
+            console.error("Error deleting workout:", error);
+            throw error;
+        }
+    },
+
+    deleteWorkouts: async (userId: string, workoutIds: string[]): Promise<void> => {
+        if (!userId || !workoutIds.length) return;
+        
+        try {
+            const workoutsRef = getWorkoutsCollection(userId);
+            await Promise.all(
+                workoutIds.map(workoutId => {
+                    const workoutDoc = doc(workoutsRef, workoutId);
+                    return deleteDoc(workoutDoc);
+                })
+            );
+        } catch (error) {
+            console.error("Error deleting workouts:", error);
             throw error;
         }
     },
@@ -164,12 +222,69 @@ export const storage = {
         try {
             const mealsRef = getMealsCollection(userId);
             const { id, ...mealData } = meal;
-            await addDoc(mealsRef, {
+            if (id) {
+                // Update existing meal
+                const mealDoc = doc(mealsRef, id);
+                await updateDoc(mealDoc, {
+                    ...mealData,
+                    date: Timestamp.fromDate(new Date(meal.date)),
+                });
+            } else {
+                // Create new meal
+                await addDoc(mealsRef, {
+                    ...mealData,
+                    date: Timestamp.fromDate(new Date(meal.date)),
+                });
+            }
+        } catch (error) {
+            console.error("Error saving meal:", error);
+            throw error;
+        }
+    },
+
+    updateMeal: async (userId: string, meal: Meal): Promise<void> => {
+        if (!userId || !meal.id) throw new Error("User ID and meal ID are required");
+        
+        try {
+            const mealsRef = getMealsCollection(userId);
+            const mealDoc = doc(mealsRef, meal.id);
+            const { id, ...mealData } = meal;
+            await updateDoc(mealDoc, {
                 ...mealData,
                 date: Timestamp.fromDate(new Date(meal.date)),
             });
         } catch (error) {
-            console.error("Error saving meal:", error);
+            console.error("Error updating meal:", error);
+            throw error;
+        }
+    },
+
+    deleteMeal: async (userId: string, mealId: string): Promise<void> => {
+        if (!userId || !mealId) throw new Error("User ID and meal ID are required");
+        
+        try {
+            const mealsRef = getMealsCollection(userId);
+            const mealDoc = doc(mealsRef, mealId);
+            await deleteDoc(mealDoc);
+        } catch (error) {
+            console.error("Error deleting meal:", error);
+            throw error;
+        }
+    },
+
+    deleteMeals: async (userId: string, mealIds: string[]): Promise<void> => {
+        if (!userId || !mealIds.length) return;
+        
+        try {
+            const mealsRef = getMealsCollection(userId);
+            await Promise.all(
+                mealIds.map(mealId => {
+                    const mealDoc = doc(mealsRef, mealId);
+                    return deleteDoc(mealDoc);
+                })
+            );
+        } catch (error) {
+            console.error("Error deleting meals:", error);
             throw error;
         }
     },

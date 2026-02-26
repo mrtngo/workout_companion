@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Calendar, Dumbbell, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Calendar, Dumbbell, ChevronDown, ChevronUp, Edit, Trash2, CheckSquare, Square } from "lucide-react";
 import Link from "next/link";
 import { storage, Workout } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
@@ -11,9 +12,11 @@ import { useAuth } from "@/lib/auth-context";
 type GroupByOption = "day" | "week" | "month" | "none";
 
 export default function WorkoutPage() {
+    const router = useRouter();
     const { user } = useAuth();
     const [workouts, setWorkouts] = useState<Workout[]>([]);
     const [expandedWorkouts, setExpandedWorkouts] = useState<Set<string>>(new Set());
+    const [selectedWorkouts, setSelectedWorkouts] = useState<Set<string>>(new Set());
     const [groupBy, setGroupBy] = useState<GroupByOption>("day");
 
     useEffect(() => {
@@ -37,6 +40,64 @@ export default function WorkoutPage() {
             }
             return next;
         });
+    };
+
+    const toggleSelectWorkout = (workoutId: string) => {
+        setSelectedWorkouts(prev => {
+            const next = new Set(prev);
+            if (next.has(workoutId)) {
+                next.delete(workoutId);
+            } else {
+                next.add(workoutId);
+            }
+            return next;
+        });
+    };
+
+    const selectAllWorkouts = () => {
+        if (selectedWorkouts.size === workouts.length) {
+            setSelectedWorkouts(new Set());
+        } else {
+            setSelectedWorkouts(new Set(workouts.map(w => w.id)));
+        }
+    };
+
+    const handleEdit = (workout: Workout) => {
+        // Store workout in sessionStorage and navigate to edit page
+        sessionStorage.setItem('editWorkout', JSON.stringify(workout));
+        router.push('/workout/log?edit=true');
+    };
+
+    const handleDelete = async (workoutId: string) => {
+        if (!user) return;
+        if (!confirm('Are you sure you want to delete this workout?')) return;
+        
+        try {
+            await storage.deleteWorkout(user.uid, workoutId);
+            setWorkouts(prev => prev.filter(w => w.id !== workoutId));
+            setSelectedWorkouts(prev => {
+                const next = new Set(prev);
+                next.delete(workoutId);
+                return next;
+            });
+        } catch (error) {
+            console.error('Error deleting workout:', error);
+            alert('Failed to delete workout');
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (!user || selectedWorkouts.size === 0) return;
+        if (!confirm(`Are you sure you want to delete ${selectedWorkouts.size} workout(s)?`)) return;
+        
+        try {
+            await storage.deleteWorkouts(user.uid, Array.from(selectedWorkouts));
+            setWorkouts(prev => prev.filter(w => !selectedWorkouts.has(w.id)));
+            setSelectedWorkouts(new Set());
+        } catch (error) {
+            console.error('Error deleting workouts:', error);
+            alert('Failed to delete workouts');
+        }
     };
 
     const groupWorkouts = (workouts: Workout[], groupBy: GroupByOption): Record<string, Workout[]> => {
@@ -89,37 +150,65 @@ export default function WorkoutPage() {
                 </Link>
             </header>
 
-            {/* Group By Filter */}
+            {/* Group By Filter and Bulk Actions */}
             {workouts.length > 0 && (
-                <div className="flex gap-2">
-                    <Button
-                        variant={groupBy === "none" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setGroupBy("none")}
-                    >
-                        All
-                    </Button>
-                    <Button
-                        variant={groupBy === "day" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setGroupBy("day")}
-                    >
-                        By Day
-                    </Button>
-                    <Button
-                        variant={groupBy === "week" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setGroupBy("week")}
-                    >
-                        By Week
-                    </Button>
-                    <Button
-                        variant={groupBy === "month" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setGroupBy("month")}
-                    >
-                        By Month
-                    </Button>
+                <div className="space-y-3">
+                    <div className="flex gap-2 flex-wrap">
+                        <Button
+                            variant={groupBy === "none" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setGroupBy("none")}
+                        >
+                            All
+                        </Button>
+                        <Button
+                            variant={groupBy === "day" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setGroupBy("day")}
+                        >
+                            By Day
+                        </Button>
+                        <Button
+                            variant={groupBy === "week" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setGroupBy("week")}
+                        >
+                            By Week
+                        </Button>
+                        <Button
+                            variant={groupBy === "month" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setGroupBy("month")}
+                        >
+                            By Month
+                        </Button>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={selectAllWorkouts}
+                            className="flex items-center gap-2"
+                        >
+                            {selectedWorkouts.size === workouts.length ? (
+                                <CheckSquare className="h-4 w-4" />
+                            ) : (
+                                <Square className="h-4 w-4" />
+                            )}
+                            Select All
+                        </Button>
+                        {selectedWorkouts.size > 0 && (
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={handleBulkDelete}
+                                className="flex items-center gap-2"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                                Delete Selected ({selectedWorkouts.size})
+                            </Button>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -153,26 +242,71 @@ export default function WorkoutPage() {
                                     return acc;
                                 }, {} as Record<string, typeof workout.exercises>);
 
+                                const isSelected = selectedWorkouts.has(workout.id);
+
                                 return (
-                                    <Card key={workout.id}>
-                                        <CardHeader 
-                                            className="pb-2 cursor-pointer"
-                                            onClick={() => toggleWorkout(workout.id)}
-                                        >
-                                            <CardTitle className="text-lg flex justify-between items-center">
-                                                <span>{workout.name}</span>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-normal text-muted-foreground flex items-center gap-1">
-                                                        <Calendar className="h-3 w-3" />
-                                                        {new Date(workout.date).toLocaleDateString()}
-                                                    </span>
-                                                    {isExpanded ? (
-                                                        <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                    <Card key={workout.id} className={isSelected ? "ring-2 ring-primary" : ""}>
+                                        <CardHeader className="pb-2">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <button
+                                                    onClick={() => toggleSelectWorkout(workout.id)}
+                                                    className="p-1 hover:bg-muted rounded"
+                                                >
+                                                    {isSelected ? (
+                                                        <CheckSquare className="h-4 w-4 text-primary" />
                                                     ) : (
-                                                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                                        <Square className="h-4 w-4 text-muted-foreground" />
                                                     )}
+                                                </button>
+                                                <div className="flex-1 flex items-center justify-between">
+                                                    <CardTitle 
+                                                        className="text-lg cursor-pointer flex-1"
+                                                        onClick={() => toggleWorkout(workout.id)}
+                                                    >
+                                                        {workout.name}
+                                                    </CardTitle>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-normal text-muted-foreground flex items-center gap-1">
+                                                            <Calendar className="h-3 w-3" />
+                                                            {new Date(workout.date).toLocaleDateString()}
+                                                        </span>
+                                                        <div className="flex items-center gap-1">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-7 w-7"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleEdit(workout);
+                                                                }}
+                                                            >
+                                                                <Edit className="h-3 w-3" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-7 w-7 text-destructive"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDelete(workout.id);
+                                                                }}
+                                                            >
+                                                                <Trash2 className="h-3 w-3" />
+                                                            </Button>
+                                                            <button
+                                                                onClick={() => toggleWorkout(workout.id)}
+                                                                className="p-1 hover:bg-muted rounded"
+                                                            >
+                                                                {isExpanded ? (
+                                                                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                                                ) : (
+                                                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </CardTitle>
+                                            </div>
                                         </CardHeader>
                                         <CardContent>
                                             {!isExpanded ? (

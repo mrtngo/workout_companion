@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,11 +16,36 @@ const generateId = () => Math.random().toString(36).substring(2, 9);
 
 export default function LogWorkoutPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { user } = useAuth();
+    const [workoutId, setWorkoutId] = useState<string | null>(null);
     const [workoutName, setWorkoutName] = useState("Evening Workout");
     const [exercises, setExercises] = useState<Exercise[]>([]);
     // Default to today's date
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+    useEffect(() => {
+        // Check if we're in edit mode
+        const isEdit = searchParams.get('edit') === 'true';
+        if (isEdit) {
+            const editWorkoutStr = sessionStorage.getItem('editWorkout');
+            if (editWorkoutStr) {
+                try {
+                    const editWorkout: Workout = JSON.parse(editWorkoutStr);
+                    setWorkoutId(editWorkout.id);
+                    setWorkoutName(editWorkout.name);
+                    setExercises(editWorkout.exercises);
+                    // Extract date from ISO string
+                    const workoutDate = new Date(editWorkout.date);
+                    setDate(workoutDate.toISOString().split('T')[0]);
+                    // Clear sessionStorage after loading
+                    sessionStorage.removeItem('editWorkout');
+                } catch (error) {
+                    console.error('Error parsing workout data:', error);
+                }
+            }
+        }
+    }, [searchParams]);
 
     const addExercise = (group?: string) => {
         setExercises([
@@ -119,7 +144,7 @@ export default function LogWorkoutPage() {
         selectedDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
 
         const workout: Workout = {
-            id: generateId(),
+            id: workoutId || generateId(),
             date: selectedDate.toISOString(),
             name: workoutName,
             exercises,

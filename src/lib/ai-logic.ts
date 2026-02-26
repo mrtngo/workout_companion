@@ -16,6 +16,81 @@ const FOOD_DATABASE: Record<string, { calories: number; protein: number; carbs: 
 // Simple UUID generator
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
+// Parse date from text, returns ISO string or null if no date found
+const parseDateFromText = (text: string): string | null => {
+    const lowerText = text.toLowerCase();
+    const now = new Date();
+    
+    // Check for relative time references
+    if (lowerText.includes("yesterday")) {
+        const date = new Date(now);
+        date.setDate(date.getDate() - 1);
+        return date.toISOString();
+    }
+    
+    if (lowerText.includes("today") || lowerText.includes("just now")) {
+        return now.toISOString();
+    }
+    
+    // Check for "X hours ago" or "X minutes ago"
+    const hoursAgoMatch = lowerText.match(/(\d+)\s*hours?\s*ago/);
+    if (hoursAgoMatch) {
+        const hours = parseInt(hoursAgoMatch[1]);
+        const date = new Date(now);
+        date.setHours(date.getHours() - hours);
+        return date.toISOString();
+    }
+    
+    const minutesAgoMatch = lowerText.match(/(\d+)\s*minutes?\s*ago/);
+    if (minutesAgoMatch) {
+        const minutes = parseInt(minutesAgoMatch[1]);
+        const date = new Date(now);
+        date.setMinutes(date.getMinutes() - minutes);
+        return date.toISOString();
+    }
+    
+    // Check for time of day (e.g., "at 2pm", "at 14:30")
+    const timeMatch = lowerText.match(/(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
+    if (timeMatch) {
+        const date = new Date(now);
+        let hours = parseInt(timeMatch[1]);
+        const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+        const period = timeMatch[3]?.toLowerCase();
+        
+        if (period === "pm" && hours !== 12) hours += 12;
+        if (period === "am" && hours === 12) hours = 0;
+        
+        date.setHours(hours, minutes, 0, 0);
+        // If the time is in the future, assume it was yesterday
+        if (date > now) {
+            date.setDate(date.getDate() - 1);
+        }
+        return date.toISOString();
+    }
+    
+    // Check for date patterns (e.g., "on January 15", "on 2024-01-15")
+    const datePatternMatch = lowerText.match(/(?:on\s+)?(\d{4})-(\d{2})-(\d{2})/);
+    if (datePatternMatch) {
+        const year = parseInt(datePatternMatch[1]);
+        const month = parseInt(datePatternMatch[2]) - 1;
+        const day = parseInt(datePatternMatch[3]);
+        const date = new Date(year, month, day);
+        // Use current time for that date
+        const now = new Date();
+        date.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+        return date.toISOString();
+    }
+    
+    // No date found, return null to use current time
+    return null;
+};
+
+// Get date for logging - uses parsed date if found, otherwise current exact timestamp
+const getLogDate = (text: string): string => {
+    const parsedDate = parseDateFromText(text);
+    return parsedDate || new Date().toISOString();
+};
+
 export interface AIResponse {
     text: string;
     action?: "LOG_WORKOUT" | "LOG_MEAL" | "SUGGESTION";
@@ -43,7 +118,7 @@ export const aiLogic = {
 
         return {
             id: generateId(),
-            date: new Date().toISOString(),
+            date: getLogDate(text),
             name: foundFood.name.charAt(0).toUpperCase() + foundFood.name.slice(1),
             calories: foundFood.calories * multiplier,
             protein: foundFood.protein * multiplier,
@@ -92,7 +167,7 @@ export const aiLogic = {
 
         return {
             id: generateId(),
-            date: new Date().toISOString(),
+            date: getLogDate(text),
             name: "AI Logged Workout",
             exercises: [exercise],
         };
