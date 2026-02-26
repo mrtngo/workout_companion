@@ -28,12 +28,10 @@ async function callGeminiWithRetry(
                 contents,
             });
             
-            // Extract text from response - handle different response structures
+            // Extract text from response
             let responseText = "";
             if (typeof response.text === "string") {
                 responseText = response.text;
-            } else if (response.response?.text) {
-                responseText = response.response.text;
             } else if (response.candidates?.[0]?.content?.parts?.[0]?.text) {
                 responseText = response.candidates[0].content.parts[0].text;
             } else {
