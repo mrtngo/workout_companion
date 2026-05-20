@@ -1,5 +1,7 @@
-import { Meal, Workout } from "./storage";
+import { Meal, Workout, UserProfile } from "./storage";
 import { getCurrentModel, cycleToNextModel, isRateLimitError, resetToFirstModel, AVAILABLE_MODELS } from "./model-cycler";
+
+const generateId = () => Math.random().toString(36).substring(2, 9);
 
 export interface LLMResponse {
     text: string;
@@ -128,6 +130,91 @@ Always estimate nutrition realistically — never return 0 calories for real foo
             return {
                 text: "Sorry, I'm having trouble processing your request right now. Please try again.",
             };
+        }
+    },
+
+    generateWorkout: async (
+        profile: UserProfile | null,
+        recentWorkouts: Workout[]
+    ): Promise<Workout | null> => {
+        try {
+            const today = new Date().toISOString().split("T")[0];
+
+            // Trim history to the bits the model needs (name, date, exercises with sets summary)
+            const trimmedHistory = (recentWorkouts ?? []).slice(0, 10).map(w => ({
+                date: w.date?.split("T")[0],
+                name: w.name,
+                exercises: w.exercises.map(e => ({
+                    name: e.name,
+                    sets: e.sets.map(s => ({ reps: s.reps, weight: s.weight, completed: s.completed })),
+                })),
+            }));
+
+            const prompt = `You are an experienced strength coach designing today's workout for ONE user.
+
+Today: ${today}
+User profile: ${JSON.stringify({
+                age: profile?.age,
+                weight: profile?.weight,
+                gender: profile?.gender,
+                goal: profile?.goals,
+                workoutsPerWeek: profile?.workoutsPerWeek,
+            })}
+Recent workouts (most recent first, up to 10): ${JSON.stringify(trimmedHistory)}
+
+Design today's session following these rules:
+- Pick a logical split based on what was trained recently — do NOT hit the same muscle group as yesterday.
+- 3-5 exercises. Compound lifts first, accessories after. Add one core movement if room.
+- For each exercise, choose sets and reps appropriate to the user's goal (lose_weight → higher reps 12-15, build_muscle → 6-10, gain_weight → 4-8, maintain/improve_fitness → 8-12).
+- For weights: if the user has done this exercise before in the history, base the weight on their last session. If they completed all sets at the target reps, add 2.5kg (progressive overload). If not, keep the weight the same. Use 0 for bodyweight exercises.
+- For exercises they have NOT done before, set weight to 0 (they'll fill it in).
+- Workout name should describe the focus (e.g. "Upper Body Push", "Leg Day", "Pull & Core").
+
+Respond ONLY with valid JSON, no markdown, no commentary:
+{"name":"<workout name>","exercises":[{"name":"<exercise>","sets":[{"reps":N,"weight":N}, ...]}]}`;
+
+            const response = await callGeminiWithRetry(prompt);
+
+            let jsonText = response.text.trim();
+            if (jsonText.startsWith("```json")) {
+                jsonText = jsonText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+            } else if (jsonText.startsWith("```")) {
+                jsonText = jsonText.replace(/^```\s*/, "").replace(/\s*```$/, "");
+            }
+
+            type RawSet = { reps?: unknown; weight?: unknown };
+            type RawExercise = { name?: unknown; sets?: unknown };
+            type RawWorkout = { name?: unknown; exercises?: unknown };
+
+            const parsed = JSON.parse(jsonText) as RawWorkout;
+            if (!parsed?.name || !Array.isArray(parsed.exercises) || parsed.exercises.length === 0) {
+                return null;
+            }
+
+            const exercises = (parsed.exercises as RawExercise[])
+                .filter(ex => ex?.name && Array.isArray(ex.sets) && (ex.sets as unknown[]).length > 0)
+                .map(ex => ({
+                    id: generateId(),
+                    name: String(ex.name),
+                    sets: (ex.sets as RawSet[]).map(s => ({
+                        id: generateId(),
+                        reps: Math.max(1, Math.round(Number(s?.reps) || 10)),
+                        weight: Math.max(0, Number(s?.weight) || 0),
+                        completed: false,
+                    })),
+                }));
+
+            if (exercises.length === 0) return null;
+
+            return {
+                id: generateId(),
+                date: new Date().toISOString(),
+                name: String(parsed.name),
+                exercises,
+            };
+        } catch (error) {
+            console.error("Error generating workout:", error);
+            return null;
         }
     },
 
