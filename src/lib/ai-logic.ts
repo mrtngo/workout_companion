@@ -16,6 +16,35 @@ const FOOD_DATABASE: Record<string, { calories: number; protein: number; carbs: 
 // Simple UUID generator
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
+export type MuscleGroup = "push" | "pull" | "legs" | "core" | "cardio" | "other";
+
+const MUSCLE_GROUP_KEYWORDS: Array<{ group: MuscleGroup; keywords: string[] }> = [
+    { group: "push", keywords: ["bench", "push-up", "pushup", "push up", "overhead press", "shoulder press", "dip", "tricep", "chest fly"] },
+    { group: "pull", keywords: ["pull-up", "pullup", "pull up", "row", "lat pulldown", "pulldown", "face pull", "curl", "bicep"] },
+    { group: "legs", keywords: ["squat", "deadlift", "lunge", "leg press", "calf", "hip thrust", "glute", "romanian"] },
+    { group: "core", keywords: ["plank", "crunch", "sit-up", "situp", "russian twist", "leg raise", "ab "] },
+    { group: "cardio", keywords: ["burpee", "mountain climber", "jumping jack", "high knee", "run", "jog", "sprint", "cycling", "rowing machine"] },
+];
+
+export const muscleGroupOf = (name: string): MuscleGroup => {
+    const lower = name.toLowerCase();
+    for (const { group, keywords } of MUSCLE_GROUP_KEYWORDS) {
+        if (keywords.some(k => lower.includes(k))) return group;
+    }
+    return "other";
+};
+
+// Most recent matching entry across history, by exercise name (case-insensitive)
+const findLastExerciseEntry = (workouts: Workout[] | undefined, name: string): Exercise | null => {
+    if (!workouts) return null;
+    const target = name.toLowerCase();
+    for (const w of workouts) {
+        const match = w.exercises.find(e => e.name.toLowerCase() === target);
+        if (match) return match;
+    }
+    return null;
+};
+
 // Parse date from text, returns ISO string or null if no date found
 const parseDateFromText = (text: string): string | null => {
     const lowerText = text.toLowerCase();
@@ -184,162 +213,106 @@ export const aiLogic = {
     },
 
     suggestWorkoutFromHistory: (workouts: Workout[], profile?: UserProfile | null): Workout | null => {
-        // Goal-based exercise recommendations
-        const goalBasedExercises: Record<string, string[]> = {
-            lose_weight: ["Burpees", "Mountain Climbers", "Jumping Jacks", "High Knees", "Squats", "Lunges"],
-            gain_weight: ["Squats", "Deadlifts", "Bench Press", "Rows", "Overhead Press"],
-            build_muscle: ["Push-ups", "Pull-ups", "Squats", "Deadlifts", "Bench Press", "Rows"],
-            maintain: ["Push-ups", "Squats", "Planks", "Lunges", "Burpees"],
-            improve_fitness: ["Burpees", "Mountain Climbers", "Jumping Jacks", "Squats", "Lunges", "Planks"],
+        const goalReps = profile?.goals === "build_muscle" ? 8 :
+                         profile?.goals === "lose_weight" ? 15 :
+                         profile?.goals === "gain_weight" ? 6 : 12;
+        const goalSets = profile?.workoutsPerWeek && profile.workoutsPerWeek >= 4 ? 4 : 3;
+
+        // Group → ordered list of exercises (compound first), tuned per goal
+        const groupExercises: Record<MuscleGroup, string[]> = {
+            push: profile?.goals === "lose_weight"
+                ? ["Push-ups", "Burpees", "Overhead Press", "Bench Press"]
+                : ["Bench Press", "Overhead Press", "Push-ups", "Dips"],
+            pull: ["Pull-ups", "Rows", "Lat Pulldown", "Face Pulls"],
+            legs: profile?.goals === "lose_weight"
+                ? ["Squats", "Lunges", "Jumping Jacks", "Mountain Climbers"]
+                : ["Squats", "Deadlifts", "Lunges", "Romanian Deadlifts"],
+            core: ["Planks", "Hanging Leg Raises", "Russian Twists"],
+            cardio: ["Burpees", "Mountain Climbers", "Jumping Jacks", "High Knees"],
+            other: ["Push-ups", "Squats", "Planks"],
         };
 
-        if (!workouts || workouts.length === 0) {
-            // Default workout based on user goals or generic starter
-            const goalExercises = profile?.goals ? goalBasedExercises[profile.goals] || [] : [];
-            const selectedExercises = goalExercises.length > 0 
-                ? goalExercises.slice(0, 3)
-                : ["Push-ups", "Squats"];
+        const pickGroupForToday = (): MuscleGroup => {
+            // Avoid groups hit in the most recent workout (and yesterday's if there is one)
+            const today = new Date().toISOString().split('T')[0];
+            const lastWorkouts = (workouts ?? []).filter(w => w.date && w.date.split('T')[0] !== today).slice(0, 2);
+            const recentGroups = new Set<MuscleGroup>();
+            lastWorkouts.forEach(w => w.exercises.forEach(e => recentGroups.add(muscleGroupOf(e.name))));
 
-            return {
+            const goalOrder: MuscleGroup[] = profile?.goals === "lose_weight"
+                ? ["cardio", "legs", "push", "pull", "core"]
+                : profile?.goals === "build_muscle" || profile?.goals === "gain_weight"
+                ? ["push", "pull", "legs", "core", "cardio"]
+                : ["push", "legs", "pull", "core", "cardio"];
+
+            return goalOrder.find(g => !recentGroups.has(g)) ?? goalOrder[0];
+        };
+
+        // Build progressive-overload set for an exercise based on history
+        const buildSetsFor = (name: string): WorkoutSet[] => {
+            const lastEntry = findLastExerciseEntry(workouts, name);
+            const setsCount = lastEntry ? Math.max(lastEntry.sets.length, goalSets) : goalSets;
+            const targetReps = lastEntry?.sets[0]?.reps ?? goalReps;
+            const lastWeight = lastEntry?.sets[0]?.weight ?? 0;
+            const allCompleted = lastEntry?.sets.every(s => s.completed) ?? false;
+
+            // Progressive overload: +2.5kg if all sets completed at target reps, else hold
+            const nextWeight = lastWeight > 0 && allCompleted
+                ? Math.round((lastWeight + 2.5) * 2) / 2
+                : lastWeight;
+
+            return Array.from({ length: setsCount }, () => ({
                 id: generateId(),
-                date: new Date().toISOString(),
-                name: profile?.goals === "build_muscle" ? "Strength Builder" : 
-                      profile?.goals === "lose_weight" ? "Fat Burner" : 
-                      "Full Body Starter",
-                exercises: selectedExercises.map(exName => ({
-                    id: generateId(),
-                    name: exName,
-                    sets: Array.from({ length: profile?.workoutsPerWeek && profile.workoutsPerWeek >= 4 ? 4 : 3 }, (_, i) => ({
-                        id: generateId(),
-                        reps: profile?.goals === "build_muscle" ? 8 : 
-                              profile?.goals === "lose_weight" ? 15 : 12,
-                        weight: 0,
-                        completed: false,
-                    })),
-                })),
-            };
+                reps: targetReps,
+                weight: nextWeight,
+                completed: false,
+            }));
+        };
+
+        const targetGroup = pickGroupForToday();
+        const candidatePool = groupExercises[targetGroup];
+
+        // Prefer exercises the user has actually done before (so weights are real); fall back to canonical list
+        const userExercises = new Set<string>();
+        (workouts ?? []).slice(0, 15).forEach(w => w.exercises.forEach(e => {
+            if (muscleGroupOf(e.name) === targetGroup) userExercises.add(e.name);
+        }));
+
+        const chosen: string[] = [];
+        userExercises.forEach(n => { if (chosen.length < 2) chosen.push(n); });
+        for (const name of candidatePool) {
+            if (chosen.length >= 3) break;
+            if (!chosen.some(c => c.toLowerCase() === name.toLowerCase())) chosen.push(name);
         }
 
-        // Analyze workout history
-        const exerciseFrequency: Record<string, number> = {};
-        const exerciseDetails: Record<string, { sets: number; reps: number }> = {};
-        const recentWorkouts = workouts.slice(0, 10); // Last 10 workouts
-
-        // Count exercise frequency and average sets/reps
-        recentWorkouts.forEach(workout => {
-            workout.exercises.forEach(exercise => {
-                const name = exercise.name.toLowerCase();
-                exerciseFrequency[name] = (exerciseFrequency[name] || 0) + 1;
-                
-                if (!exerciseDetails[name]) {
-                    const totalSets = exercise.sets.length;
-                    const avgReps = exercise.sets.reduce((sum, set) => sum + set.reps, 0) / totalSets;
-                    exerciseDetails[name] = { sets: totalSets, reps: Math.round(avgReps) };
-                }
-            });
-        });
-
-        // Find exercises that haven't been done recently (last 3 workouts)
-        const last3Workouts = workouts.slice(0, 3);
-        const recentExercises = new Set<string>();
-        last3Workouts.forEach(workout => {
-            workout.exercises.forEach(ex => recentExercises.add(ex.name.toLowerCase()));
-        });
-
-        // Suggest exercises that are common but not done recently, or suggest variety
-        const suggestedExercises: Exercise[] = [];
-        const allExercises = Object.keys(exerciseFrequency);
-        
-        // Strategy: Pick 2-3 exercises
-        // 1. Pick one that's common but not done recently
-        // 2. Pick one that's done frequently (user likes it)
-        // 3. Add a complementary exercise
-
-        const sortedByFrequency = allExercises.sort((a, b) => exerciseFrequency[b] - exerciseFrequency[a]);
-        
-        // Find exercises not done recently
-        const notRecentExercises = sortedByFrequency.filter(ex => !recentExercises.has(ex));
-        
-        if (notRecentExercises.length > 0) {
-            // Suggest the most common exercise that hasn't been done recently
-            const exerciseName = notRecentExercises[0];
-            const details = exerciseDetails[exerciseName] || { sets: 3, reps: 10 };
-            suggestedExercises.push({
-                id: generateId(),
-                name: exerciseName.charAt(0).toUpperCase() + exerciseName.slice(1),
-                sets: Array.from({ length: details.sets }, (_, i) => ({
-                    id: generateId(),
-                    reps: details.reps,
-                    weight: 0,
-                    completed: false,
-                })),
-            });
+        // Add a core finisher unless we already have one
+        if (!chosen.some(c => muscleGroupOf(c) === "core")) {
+            chosen.push("Planks");
         }
 
-        // Add a frequently done exercise (user's favorite)
-        if (sortedByFrequency.length > 0 && suggestedExercises.length < 3) {
-            const favoriteExercise = sortedByFrequency[0];
-            if (!suggestedExercises.find(ex => ex.name.toLowerCase() === favoriteExercise)) {
-                const details = exerciseDetails[favoriteExercise] || { sets: 3, reps: 10 };
-                suggestedExercises.push({
-                    id: generateId(),
-                    name: favoriteExercise.charAt(0).toUpperCase() + favoriteExercise.slice(1),
-                    sets: Array.from({ length: details.sets }, (_, i) => ({
-                        id: generateId(),
-                        reps: details.reps,
-                        weight: 0,
-                        completed: false,
-                    })),
-                });
-            }
-        }
+        const exercises: Exercise[] = chosen.map(name => ({
+            id: generateId(),
+            name,
+            group: muscleGroupOf(name),
+            sets: buildSetsFor(name),
+        }));
 
-        // Add a complementary exercise based on goals or default
-        if (suggestedExercises.length < 3) {
-            const goalExercises = profile?.goals ? goalBasedExercises[profile.goals] || [] : [];
-            const complementaryExercises = goalExercises.length > 0 
-                ? goalExercises 
-                : ["Planks", "Lunges", "Burpees", "Mountain Climbers"];
-            
-            const existingNames = suggestedExercises.map(ex => ex.name.toLowerCase());
-            const complementary = complementaryExercises.find(
-                ex => !existingNames.includes(ex.toLowerCase())
-            );
-            
-            if (complementary) {
-                const reps = profile?.goals === "build_muscle" ? 8 : 
-                            profile?.goals === "lose_weight" ? 15 : 12;
-                const sets = profile?.workoutsPerWeek && profile.workoutsPerWeek >= 4 ? 4 : 3;
-                
-                suggestedExercises.push({
-                    id: generateId(),
-                    name: complementary,
-                    sets: Array.from({ length: sets }, (_, i) => ({
-                        id: generateId(),
-                        reps: reps,
-                        weight: 0,
-                        completed: false,
-                    })),
-                });
-            }
-        }
+        if (exercises.length === 0) return null;
 
-        if (suggestedExercises.length === 0) {
-            return null;
-        }
-
-        // Determine workout name based on exercises
-        const workoutName = suggestedExercises.length === 1 
-            ? `${suggestedExercises[0].name} Focus`
-            : suggestedExercises.length === 2
-            ? `${suggestedExercises[0].name} & ${suggestedExercises[1].name}`
-            : "Full Body Workout";
+        const groupLabel: Record<MuscleGroup, string> = {
+            push: "Push Day",
+            pull: "Pull Day",
+            legs: "Leg Day",
+            core: "Core Session",
+            cardio: "Conditioning",
+            other: "Full Body",
+        };
 
         return {
             id: generateId(),
             date: new Date().toISOString(),
-            name: workoutName,
-            exercises: suggestedExercises,
+            name: groupLabel[targetGroup],
+            exercises,
         };
     },
 

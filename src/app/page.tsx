@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { Activity, Flame, Trophy, Sparkles, Send, LogOut, CheckCircle2, Dumbbell, User } from "lucide-react";
-import { storage, WorkoutOfDay, UserProfile } from "@/lib/storage";
+import { storage, WorkoutOfDay, UserProfile, Workout } from "@/lib/storage";
 import { aiLogic } from "@/lib/ai-logic";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -50,8 +50,26 @@ export default function Home() {
       let wod = await storage.getWorkoutOfDay(user.uid, todayDate);
       
       if (!wod) {
-        // Generate a new suggestion based on history and profile
-        const suggestedWorkout = aiLogic.suggestWorkoutFromHistory(workouts, profile);
+        // Try Gemini first, fall back to local rule-based suggester
+        let suggestedWorkout: Workout | null = null;
+        try {
+          const res = await fetch("/api/workout/suggest", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ profile, recentWorkouts: workouts.slice(0, 10) }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            suggestedWorkout = data?.workout ?? null;
+          }
+        } catch (err) {
+          console.error("LLM workout suggestion failed, falling back:", err);
+        }
+
+        if (!suggestedWorkout) {
+          suggestedWorkout = aiLogic.suggestWorkoutFromHistory(workouts, profile);
+        }
+
         if (suggestedWorkout) {
           const newWOD: WorkoutOfDay = {
             id: "",
@@ -181,14 +199,19 @@ export default function Home() {
             <div>
               <h3 className="font-bold text-lg mb-2">{workoutOfDay.workout.name}</h3>
               <div className="space-y-2">
-                {workoutOfDay.workout.exercises.map((exercise, idx) => (
-                  <div key={idx} className="text-sm bg-white/10 rounded p-2">
-                    <div className="font-semibold">{exercise.name}</div>
-                    <div className="text-xs opacity-90">
-                      {exercise.sets.length} sets × {exercise.sets[0]?.reps || 0} reps
+                {workoutOfDay.workout.exercises.map((exercise, idx) => {
+                  const firstSet = exercise.sets[0];
+                  const weight = firstSet?.weight ?? 0;
+                  return (
+                    <div key={idx} className="text-sm bg-white/10 rounded p-2">
+                      <div className="font-semibold">{exercise.name}</div>
+                      <div className="text-xs opacity-90">
+                        {exercise.sets.length} sets × {firstSet?.reps || 0} reps
+                        {weight > 0 && <span> @ {weight}kg</span>}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
             <div className="flex gap-2 pt-2">
