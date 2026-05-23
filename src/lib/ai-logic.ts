@@ -370,41 +370,61 @@ export const aiLogic = {
     },
 
     processInput: (text: string, language: "en" | "es" = "en"): AIResponse => {
-        const lowerText = text.toLowerCase();
+        const lowerText = text.toLowerCase().trim();
 
-        // 1. Check for Meal Logging
-        const isMealTrigger = lowerText.includes("ate") || lowerText.includes("had") || lowerText.includes("drink") || lowerText.includes("drank") || lowerText.includes("comi") || lowerText.includes("comí") || lowerText.includes("tome") || lowerText.includes("tomé") || lowerText.includes("desayun") || lowerText.includes("almorz") || lowerText.includes("cené") || lowerText.includes("cene");
-        if (isMealTrigger) {
+        // 1. Check for Greetings
+        const isGreeting = /\b(hola|hello|hi|hey|buenas|buenos dias|buenos días|buenas tardes|buenas noches)\b/i.test(lowerText);
+        if (isGreeting) {
+            return {
+                text: language === "es"
+                    ? "¡Hola, Atleta! 👋 ¿Cómo va el día hoy? Estoy aquí para ayudarte con tus entrenamientos, resolver tus dudas sobre nutrición o registrar tus progresos. ¿De qué te gustaría hablar?"
+                    : "Hello, Athlete! 👋 How is your day going? I'm here to help you with your training, answer nutrition questions, or log your progress. What would you like to talk about?"
+            };
+        }
+
+        // 2. Check for Thanksgiving/Agreement
+        const isThanks = /\b(gracias|thanks|thank you|ty|excelente|perfecto|ok|genial|great|awesome|entendido)\b/i.test(lowerText);
+        if (isThanks) {
+            return {
+                text: language === "es"
+                    ? "¡De nada! 💪 Mantente enfocado en tus objetivos. ¿Hay algo más en lo que pueda apoyarte hoy?"
+                    : "You're welcome! 💪 Stay focused on your goals. Is there anything else I can help you with today?"
+            };
+        }
+
+        // 3. Check for specific suggestions request
+        const isSuggestionTrigger = /\b(sugier|suger|recomienda|recommend|suggest|what should i do|qué debo hacer|que debo hacer|qué hacer|que hacer)\b/i.test(lowerText);
+        if (isSuggestionTrigger && /\b(workout|entrenamiento|entreno|rutina|ejercicio|ejercicios|hacer)\b/i.test(lowerText)) {
+            return {
+                text: aiLogic.generateSuggestion(language),
+                action: "SUGGESTION",
+            };
+        }
+
+        // 4. Check for Meal Logging triggers (requires actual log verbs with word boundaries)
+        const isMealLogIntent = /\b(ate|had|drank|drink|logged|comi|comí|tome|tomé|desayune|desayuné|almorce|almorcé|cene|cené|merende|merendé|registre|registré)\b/i.test(lowerText);
+        if (isMealLogIntent) {
             const meal = aiLogic.estimateNutrition(text);
             if (meal) {
                 return {
                     text: language === "es" 
-                        ? `He registrado tu comida: **${meal.name}** (${meal.calories} kcal).`
-                        : `I've logged your meal: **${meal.name}** (${meal.calories} kcal).`,
+                        ? `He registrado tu comida: **${meal.name}** (${meal.calories} kcal). Puedes verla en tu pestaña de Nutrición.`
+                        : `I've logged your meal: **${meal.name}** (${meal.calories} kcal). You can view it in your Fuel tab.`,
                     action: "LOG_MEAL",
                     data: meal,
-                };
-            } else {
-                return {
-                    text: language === "es"
-                        ? "Noté que mencionaste comida, pero no pude identificarla en mi base de datos. Intenta diciendo 'Comí una manzana'."
-                        : "I noticed you mentioned food, but I couldn't identify it in my database. Try saying 'I ate an apple'.",
                 };
             }
         }
 
-        // 2. Check for Workout Logging
-        const isWorkoutTrigger = (lowerText.includes("did") || lowerText.includes("hice")) && (lowerText.includes("sets") || lowerText.includes("reps") || lowerText.includes("workout") || lowerText.includes("series") || lowerText.includes("repeticiones") || lowerText.includes("entreno") || lowerText.includes("entrenamiento"));
-        if (isWorkoutTrigger) {
+        // 5. Check for Workout Logging triggers
+        const isWorkoutLogIntent = /\b(did|hice|entrené|entrene|registré|registre)\b/i.test(lowerText) && 
+            /\b(sets|reps|workout|series|repeticiones|entreno|entrenamiento|flexiones|pushups|sentadillas|squats)\b/i.test(lowerText);
+        if (isWorkoutLogIntent) {
             const workout = aiLogic.parseWorkout(text);
             if (workout) {
-                // translate exercise name or default workout name if Spanish
                 if (language === "es") {
                     workout.name = "Entrenamiento por IA";
                 }
-                
-                const setsMatch = lowerText.match(/(\d+)\s*sets?/) || lowerText.match(/(\d+)\s*series/);
-                const repsMatch = lowerText.match(/(\d+)\s*reps?/) || lowerText.match(/(\d+)\s*repeticiones/);
                 let exerciseName = lowerText
                     .replace(/i did/g, "")
                     .replace(/hice/g, "")
@@ -420,7 +440,6 @@ export const aiLogic = {
                 } else {
                     exerciseName = exerciseName.charAt(0).toUpperCase() + exerciseName.slice(1);
                 }
-
                 workout.exercises[0].name = exerciseName;
 
                 return {
@@ -433,27 +452,51 @@ export const aiLogic = {
             }
         }
 
-        // 3. Check for Suggestion
-        const isSuggestionTrigger = lowerText.includes("suggest") || lowerText.includes("what should i do") || lowerText.includes("sugier") || lowerText.includes("suger") || lowerText.includes("que debo hacer") || lowerText.includes("qué debo hacer") || lowerText.includes("que hacer") || lowerText.includes("qué hacer");
-        if (isSuggestionTrigger) {
+        // 6. Check for Nutrition topics (General Advice)
+        const isNutritionTopic = /\b(comida|comidas|nutricion|nutrición|dieta|diet|proteina|proteína|protein|carbohidrato|carbohidratos|carbs|carbos|grasa|grasas|fats|caloria|calorias|calorías|calories|receta|recipe|comer|cena|desayuno|almuerzo)\b/i.test(lowerText);
+        if (isNutritionTopic) {
             return {
-                text: aiLogic.generateSuggestion(language),
-                action: "SUGGESTION",
+                text: language === "es"
+                    ? "Para optimizar tu rendimiento, te recomiendo priorizar la **proteína** (1.6 a 2.2g por kg de peso corporal) para la recuperación muscular, consumir **carbohidratos complejos** (avena, arroz) antes de entrenar para tener energía, y mantener grasas saludables. Si quieres que registre una comida, escribe algo como: *'Comí arroz con pollo'*."
+                    : "To optimize your performance, I recommend prioritizing **protein** (1.6 to 2.2g per kg of body weight) for muscle recovery, consuming **complex carbs** (oats, rice) before training for energy, and keeping healthy fats. If you want me to log a meal, try saying: *'I ate chicken and rice'*."
             };
         }
 
-        // 4. Default / RAG Fallback (Video search)
-        const isVideoTrigger = lowerText.includes("how to") || lowerText.includes("como hacer") || lowerText.includes("cómo hacer");
+        // 7. Check for Workout/Exercise topics (General Advice)
+        const isWorkoutTopic = /\b(entrenamiento|entrenamientos|entrenar|ejercicio|ejercicios|rutina|rutinas|workout|workouts|training|exercise|exercises|fuerza|strength|cardio|hipertrofia|musculo|músculo|hipertrophy|estiramiento|stretch|gimnasio|gym)\b/i.test(lowerText);
+        if (isWorkoutTopic) {
+            return {
+                text: language === "es"
+                    ? "La clave para ganar fuerza e hipertrofia es la **sobrecarga progresiva** (aumentar peso o repeticiones gradualmente). Asegúrate de calentar bien antes de cada sesión y mantener una técnica sólida. Puedes iniciar un entrenamiento en vivo con el botón '+' o pedirme una rutina diciendo: *'Sugiéreme un entrenamiento'*."
+                    : "The key to building strength and hypertrophy is **progressive overload** (gradually increasing weight or reps). Make sure to warm up well before each session and maintain solid form. You can start a live workout with the '+' button, or ask me for a routine by saying: *'Suggest a workout'*."
+            };
+        }
+
+        // 8. Check for Recovery / Sleep topics
+        const isRecoveryTopic = /\b(sueño|sleep|recuperacion|recuperación|recovery|descanso|descansar|rest|cansado|tired|whoop|hrv|rhr|frecuencia cardiaca|frecuencia cardíaca)\b/i.test(lowerText);
+        if (isRecoveryTopic) {
+            return {
+                text: language === "es"
+                    ? "La recuperación es donde ocurre el progreso real. Intenta dormir entre **7 y 9 horas**, mantén una buena hidratación y presta atención a tu HRV y descanso de Whoop. Si te sientes muy cansado, hoy podría ser un buen día para descanso activo (caminar ligero, estiramientos)."
+                    : "Recovery is where the actual progress happens. Aim for **7 to 9 hours of sleep**, maintain good hydration, and pay attention to your Whoop HRV and recovery score. If you feel very tired, today might be a good day for active recovery (light walking, stretching)."
+            };
+        }
+
+        // 9. Default / Fallback demo video
+        const isVideoTrigger = /\b(how to|como hacer|cómo hacer|demostracion|demo|tutorial)\b/i.test(lowerText);
         if (isVideoTrigger) {
             return {
-                text: language === "es" ? "Aquí tienes una demostración en video:" : "Here is a video demonstration:",
+                text: language === "es" 
+                    ? "Aquí tienes una demostración en video del ejercicio para que revises la forma correcta:" 
+                    : "Here is a video demonstration of the exercise for you to check the proper form:",
             };
         }
 
+        // 10. Default General Response (natural & helpful, keeping scope in mind)
         return {
             text: language === "es"
-                ? "No estoy seguro de entender. Puedes decirme qué comiste ('Comí una manzana') o qué hiciste ('Hice 3 series de flexiones')."
-                : "I'm not sure I understand. You can tell me what you ate ('I ate an apple') or what you did ('I did 3 sets of pushups').",
+                ? "Como tu coach de Workout Companion, puedo guiarte con tu entrenamiento, darte consejos sobre macronutrientes, sugerirte una rutina para hoy o registrar lo que comes y entrenas. ¿Qué objetivo tienes en mente hoy?"
+                : "As your Workout Companion coach, I can guide you through your training, give macronutrient advice, suggest a routine for today, or log your meals and workouts. What goal do you have in mind today?"
         };
     }
 };

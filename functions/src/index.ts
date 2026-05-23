@@ -157,19 +157,24 @@ async function processInput(
   apiKey: string,
   userInput: string,
   context?: ChatContext,
-  imageData?: ImageData
+  imageData?: ImageData,
+  language: string = "en"
 ): Promise<LLMResponse> {
   let prompt: string;
 
+  const targetLang = language === "es" ? "Spanish (ES)" : "English (EN)";
+
   if (imageData) {
     const now = new Date().toISOString();
-    prompt = `You are a nutrition expert. Look at the food in this image. Identify all dishes/items visible and estimate the total calories, protein, carbs, and fats for the whole meal. Respond ONLY with JSON:
+    prompt = `You are a nutrition expert. Look at the food in this image. Identify all dishes/items visible and estimate the total calories, protein, carbs, and fats for the whole meal. Respond in ${targetLang}. Respond ONLY with JSON:
 {"action":"LOG_MEAL","data":{"name":"<description>","date":"${now}","calories":N,"protein":N,"carbs":N,"fats":N},"text":"Logged: <description> (N kcal)"}`;
   } else {
     const now = new Date().toISOString();
-    const systemPrompt = `You are a fitness and nutrition assistant. Detect and log workouts/meals from user input. Respond ONLY with valid JSON, no extra text.
+    const systemPrompt = `You are a fitness and nutrition assistant. Detect and log workouts/meals from user input, or answer questions naturally about training, meals, recovery, or general health guidelines. Respond ONLY with valid JSON, no extra text.
 
 Current date/time: ${now}
+
+Respond in the user's preferred language: ${targetLang}.
 
 For MEALS: Use your nutrition knowledge to estimate realistic calories, protein, carbs, and fats based on the food and quantity mentioned. For example, 300g of beef ≈ 750 kcal, 69g protein, 0g carbs, 54g fats. Never return 0 for calories if the user mentioned a real food.
 
@@ -177,9 +182,9 @@ For DATES: Extract date/time if mentioned (e.g. "yesterday", "2 hours ago", "at 
 
 Meal format: {"action":"LOG_MEAL","data":{"name":"Food description","date":"ISO8601","calories":750,"protein":69,"carbs":0,"fats":54},"text":"Logged: Food (750 kcal)"}
 Workout format: {"action":"LOG_WORKOUT","data":{"name":"Workout name","date":"ISO8601","exercises":[{"name":"Exercise","sets":[{"reps":10,"weight":60}]}]},"text":"Logged workout!"}
-Other responses: {"text":"Your response"}
+Other responses (general conversation or QA): {"text":"Your response"}
 
-Always estimate nutrition realistically -- never return 0 calories for real food.`;
+Always estimate nutrition realistically -- never return 0 calories for real food. Keep responses helpful, natural, and friendly.`;
 
     const userContext = context
       ? `\nContext: ${JSON.stringify({
@@ -270,7 +275,7 @@ export const chat = onRequest(
     }
 
     try {
-      const { input, context, imageData } = request.body || {};
+      const { input, context, imageData, language } = request.body || {};
 
       if (!input && !imageData) {
         response.status(400).json({ error: "Input or imageData is required" });
@@ -287,7 +292,8 @@ export const chat = onRequest(
         apiKey,
         input || "Analyze this meal photo",
         context,
-        imageData
+        imageData,
+        language
       );
       response.json(result);
     } catch (error) {
