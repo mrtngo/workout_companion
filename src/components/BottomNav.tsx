@@ -36,6 +36,7 @@ export function BottomNav() {
     { href: "/", label: "TODAY", icon: Home, id: "home" },
     { href: "/workout", label: "TRAIN", icon: Dumbbell, id: "workout" },
     { href: "#", label: "", icon: Plus, id: "log", cta: true },
+    { href: "/assistant", label: "COACH", icon: MessageSquare, id: "assistant" },
     { href: "/nutrition", label: "FUEL", icon: Flame, id: "nutrition" },
     { href: "/progress", label: "STATS", icon: TrendingUp, id: "progress" },
   ];
