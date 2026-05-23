@@ -16,10 +16,12 @@ import {
   MessageSquare 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/lib/i18n";
 
 export function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const { t } = useLanguage();
   const [showQuickActions, setShowQuickActions] = useState(false);
 
   // Hide bottom nav on onboarding page
@@ -33,12 +35,12 @@ export function BottomNav() {
   };
 
   const navItems = [
-    { href: "/", label: "TODAY", icon: Home, id: "home" },
-    { href: "/workout", label: "TRAIN", icon: Dumbbell, id: "workout" },
+    { href: "/", label: t("nav.today"), icon: Home, id: "home" },
+    { href: "/workout", label: t("nav.train"), icon: Dumbbell, id: "workout" },
     { href: "#", label: "", icon: Plus, id: "log", cta: true },
-    { href: "/assistant", label: "COACH", icon: MessageSquare, id: "assistant" },
-    { href: "/nutrition", label: "FUEL", icon: Flame, id: "nutrition" },
-    { href: "/progress", label: "STATS", icon: TrendingUp, id: "progress" },
+    { href: "/assistant", label: t("nav.coach"), icon: MessageSquare, id: "assistant" },
+    { href: "/nutrition", label: t("nav.fuel"), icon: Flame, id: "nutrition" },
+    { href: "/progress", label: t("nav.stats"), icon: TrendingUp, id: "progress" },
   ];
 
   return (
@@ -57,7 +59,7 @@ export function BottomNav() {
                 type="button"
                 onClick={() => setShowQuickActions(true)}
                 className="w-12 h-12 rounded-full bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] flex items-center justify-center shadow-[0_6px_18px_rgba(168,232,55,0.25),_inset_0_-2px_0_rgba(0,0,0,0.12)] active:scale-95 transition-transform cursor-pointer"
-                aria-label="Add Action"
+                aria-label={t("actions.title")}
               >
                 <Plus className="h-6 w-6 stroke-[2.5]" />
               </button>
@@ -107,8 +109,8 @@ export function BottomNav() {
           {/* Action List */}
           <div className="p-6 pb-32 space-y-6 max-w-md mx-auto w-full">
             <div className="text-center mb-2">
-              <h2 className="text-xl font-medium tracking-tight">Quick Actions</h2>
-              <p className="text-sm text-neutral-500 mt-1">What would you like to track?</p>
+              <h2 className="text-xl font-medium tracking-tight">{t("actions.title")}</h2>
+              <p className="text-sm text-neutral-500 mt-1">{t("actions.subtitle")}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -120,8 +122,8 @@ export function BottomNav() {
                   <Play className="h-5 w-5 fill-current" />
                 </div>
                 <div className="text-center">
-                  <div className="font-semibold text-sm">Start Session</div>
-                  <div className="text-[10px] text-neutral-500 mt-1">Live active workout</div>
+                  <div className="font-semibold text-sm">{t("actions.start")}</div>
+                  <div className="text-[10px] text-neutral-500 mt-1">{t("actions.startDesc")}</div>
                 </div>
               </button>
 
@@ -133,8 +135,8 @@ export function BottomNav() {
                   <ClipboardList className="h-5 w-5" />
                 </div>
                 <div className="text-center">
-                  <div className="font-semibold text-sm">Log Workout</div>
-                  <div className="text-[10px] text-neutral-500 mt-1">Add completed sets</div>
+                  <div className="font-semibold text-sm">{t("actions.logWorkout")}</div>
+                  <div className="text-[10px] text-neutral-500 mt-1">{t("actions.logWorkoutDesc")}</div>
                 </div>
               </button>
 
@@ -146,8 +148,8 @@ export function BottomNav() {
                   <Utensils className="h-5 w-5" />
                 </div>
                 <div className="text-center">
-                  <div className="font-semibold text-sm">Log Meal</div>
-                  <div className="text-[10px] text-neutral-500 mt-1">Record food macros</div>
+                  <div className="font-semibold text-sm">{t("actions.logMeal")}</div>
+                  <div className="text-[10px] text-neutral-500 mt-1">{t("actions.logMealDesc")}</div>
                 </div>
               </button>
 
@@ -159,8 +161,8 @@ export function BottomNav() {
                   <MessageSquare className="h-5 w-5" />
                 </div>
                 <div className="text-center">
-                  <div className="font-semibold text-sm">Ask Coach</div>
-                  <div className="text-[10px] text-neutral-500 mt-1">Chat with Gemini</div>
+                  <div className="font-semibold text-sm">{t("actions.askCoach")}</div>
+                  <div className="text-[10px] text-neutral-500 mt-1">{t("actions.askCoachDesc")}</div>
                 </div>
               </button>
             </div>

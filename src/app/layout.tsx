@@ -5,6 +5,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { AuthProvider } from "@/lib/auth-context";
 import { AuthGuard } from "@/components/AuthGuard";
 import { OnboardingGuard } from "@/components/OnboardingGuard";
+import { LanguageProvider } from "@/lib/i18n";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -47,14 +48,16 @@ export default function RootLayout({
         className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} antialiased bg-background text-foreground`}
       >
         <AuthProvider>
-          <AuthGuard>
-            <OnboardingGuard>
-              <main className="pb-20 min-h-screen">
-                {children}
-              </main>
-              <BottomNav />
-            </OnboardingGuard>
-          </AuthGuard>
+          <LanguageProvider>
+            <AuthGuard>
+              <OnboardingGuard>
+                <main className="pb-20 min-h-screen">
+                  {children}
+                </main>
+                <BottomNav />
+              </OnboardingGuard>
+            </AuthGuard>
+          </LanguageProvider>
         </AuthProvider>
       </body>
     </html>

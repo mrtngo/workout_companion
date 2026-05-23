@@ -20,13 +20,12 @@ import { storage, Workout, Meal, WorkoutOfDay, UserProfile } from "@/lib/storage
 import { useAuth } from "@/lib/auth-context";
 import { apiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+import { useLanguage } from "@/lib/i18n";
 
 export default function Home() {
   const router = useRouter();
   const { user } = useAuth();
+  const { language, t } = useLanguage();
   
   const [now, setNow] = useState<Date | null>(null);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -82,25 +81,31 @@ export default function Home() {
 
   // Greeting logic
   const greeting = useMemo(() => {
-    if (!now) return "Hello";
+    if (!now) return t("home.greeting");
     const h = now.getHours();
-    if (h < 6) return "Good night";
-    if (h < 12) return "Morning";
-    if (h < 19) return "Afternoon";
-    return "Evening";
-  }, [now]);
+    if (h < 6) return t("home.night");
+    if (h < 12) return t("home.morning");
+    if (h < 19) return t("home.afternoon");
+    return t("home.evening");
+  }, [now, t]);
 
   // Dynamic values
   const formattedDate = useMemo(() => {
     if (!now) return "";
+    const MONTHS = language === "es" 
+      ? ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+      : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const DAYS = language === "es"
+      ? ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
+      : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     return `${DAYS[now.getDay()]} · ${MONTHS[now.getMonth()]} ${now.getDate()} · ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-  }, [now]);
+  }, [now, language]);
 
   const userName = useMemo(() => {
     if (user?.displayName) return user.displayName.split(" ")[0];
     if (user?.email) return user.email.split("@")[0];
-    return "Athlete";
-  }, [user]);
+    return t("home.greeting");
+  }, [user, t]);
 
   const userInitials = useMemo(() => {
     if (user?.displayName) {
@@ -141,10 +146,15 @@ export default function Home() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-[#0d0d0d] text-neutral-400">
-        <div className="font-mono-jetbrains text-sm">LOADING CONSOLE...</div>
+        <div className="font-mono-jetbrains text-sm">{t("home.loading")}</div>
       </div>
     );
   }
+
+  const hrvLabel = language === "es" ? "VFC" : "HRV";
+  const rhrLabel = language === "es" ? "FCR" : "RHR";
+  const sleepLabel = language === "es" ? "SUEÑO" : "SLEEP";
+  const strainLabel = language === "es" ? "ESFUERZO" : "STRAIN";
 
   return (
     <div className="min-h-screen bg-[#0d0d0d] text-white bg-glow-lime pb-32">
@@ -170,10 +180,14 @@ export default function Home() {
         {/* Readiness Section */}
         <div className="mb-9">
           <div className="flex justify-between items-baseline mb-4">
-            <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-500 uppercase">Readiness</div>
+            <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-500 uppercase">
+              {t("home.readiness")}
+            </div>
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-[oklch(0.90_0.22_128)] shadow-[0_0_8px_oklch(0.90_0.22_128)] animate-pulse-live" />
-              <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-white uppercase">Live · Ring</div>
+              <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-white uppercase">
+                {language === "es" ? "En vivo · Anillo" : "Live · Ring"}
+              </div>
             </div>
           </div>
 
@@ -184,10 +198,10 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-2 mt-2">
                 <div className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] font-mono-jetbrains text-[9px] font-bold tracking-[0.04em]">
-                  ✦ PRIMED
+                  ✦ {t("home.primed")}
                 </div>
                 <div className="font-mono-jetbrains text-[10px] text-neutral-500">
-                  +6 vs avg
+                  {language === "es" ? "+6 vs prom." : "+6 vs avg"}
                 </div>
               </div>
             </div>
@@ -212,10 +226,10 @@ export default function Home() {
           {/* 4-column data strip */}
           <div className="grid grid-cols-4 mt-6 border-y border-white/8">
             {[
-              { label: "HRV", value: hrvVal, unit: "ms" },
-              { label: "RHR", value: rhrVal, unit: "bpm" },
-              { label: "SLEEP", value: sleepVal, unit: "h" },
-              { label: "STRAIN", value: strainVal, unit: "" },
+              { label: hrvLabel, value: hrvVal, unit: "ms" },
+              { label: rhrLabel, value: rhrVal, unit: "bpm" },
+              { label: sleepLabel, value: sleepVal, unit: "h" },
+              { label: strainLabel, value: strainVal, unit: "" },
             ].map((item, idx) => (
               <div 
                 key={item.label} 
@@ -238,8 +252,12 @@ export default function Home() {
         {workoutOfDay ? (
           <div className="mb-9">
             <div className="flex justify-between items-baseline mb-3">
-              <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-500 uppercase">Programmed today</div>
-              <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-400 uppercase">Today's Selection</div>
+              <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-500 uppercase">
+                {t("home.programmedToday")}
+              </div>
+              <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-400 uppercase">
+                {language === "es" ? "Selección de hoy" : "Today's Selection"}
+              </div>
             </div>
 
             <div className="bg-neutral-900 border border-white/8 p-5 relative overflow-hidden">
@@ -248,7 +266,9 @@ export default function Home() {
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <div className="font-mono-jetbrains text-[9px] text-[oklch(0.90_0.22_128)] tracking-[0.16em] font-semibold uppercase mb-1">
-                    {workoutOfDay.workout.exercises.length > 3 ? "FULL BODY" : "SPLIT"} · DAY
+                    {workoutOfDay.workout.exercises.length > 3 
+                      ? (language === "es" ? "CUERPO COMPLETO" : "FULL BODY")
+                      : (language === "es" ? "DIVIDIDO" : "SPLIT")} · DAY
                   </div>
                   <h3 className="text-xl font-medium tracking-tight leading-tight">
                     {workoutOfDay.workout.name}
@@ -256,7 +276,9 @@ export default function Home() {
                 </div>
                 <div className="text-right">
                   <div className="font-mono-jetbrains text-[20px] tracking-tight">60′</div>
-                  <div className="font-mono-jetbrains text-[9px] text-neutral-500 uppercase mt-0.5">est.</div>
+                  <div className="font-mono-jetbrains text-[9px] text-neutral-500 uppercase mt-0.5">
+                    {t("est")}
+                  </div>
                 </div>
               </div>
 
@@ -277,7 +299,7 @@ export default function Home() {
                         {exercise.sets.length} × {setSample?.reps || 10}
                       </div>
                       <div className="font-mono-jetbrains text-[10.5px] text-[oklch(0.90_0.22_128)] min-w-[40px] text-right font-medium">
-                        {setSample?.weight > 0 ? `${setSample.weight}kg` : "BW"}
+                        {setSample?.weight > 0 ? `${setSample.weight}kg` : (language === "es" ? "PC" : "BW")}
                       </div>
                     </div>
                   );
@@ -289,23 +311,27 @@ export default function Home() {
                 onClick={() => router.push(`/workout/session?wodId=${workoutOfDay.id}`)}
                 className="w-full mt-4 py-3 bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] border-0 font-mono-jetbrains text-[11px] font-bold tracking-[0.14em] uppercase flex items-center justify-center gap-1.5 hover:opacity-95 active:scale-[0.98] transition-all cursor-pointer"
               >
-                Start session <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
+                {t("home.startSession")} <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
               </button>
             </div>
           </div>
         ) : (
           <div className="mb-9">
             <div className="flex justify-between items-baseline mb-3">
-              <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-500 uppercase">Programmed today</div>
+              <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-500 uppercase">
+                {t("home.programmedToday")}
+              </div>
             </div>
             <div className="border border-dashed border-white/14 p-8 text-center text-neutral-400">
               <Dumbbell className="h-8 w-8 mx-auto mb-3 opacity-30 text-[oklch(0.90_0.22_128)]" />
-              <p className="text-sm">No workout suggested for today yet.</p>
+              <p className="text-sm">
+                {language === "es" ? "No hay entrenamiento sugerido para hoy." : "No workout suggested for today yet."}
+              </p>
               <button 
                 onClick={() => router.push("/workout")} 
                 className="mt-3 font-mono-jetbrains text-[10px] tracking-wider text-[oklch(0.90_0.22_128)] uppercase font-semibold hover:underline cursor-pointer"
               >
-                Log a workout manually +
+                {language === "es" ? "Registrar entreno manualmente +" : "Log a workout manually +"}
               </button>
             </div>
           </div>
@@ -314,7 +340,9 @@ export default function Home() {
         {/* Intake progress bar & macros */}
         <div>
           <div className="flex justify-between items-baseline mb-3">
-            <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-500 uppercase">Intake</div>
+            <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-500 uppercase">
+              {t("home.intake")}
+            </div>
             <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-300 uppercase">
               {consumedCalories.toLocaleString()} / {calorieTarget.toLocaleString()} kcal
             </div>
@@ -339,9 +367,9 @@ export default function Home() {
           {/* Macros 3-col values */}
           <div className="grid grid-cols-3 gap-4">
             {[
-              { label: "Protein", val: consumedProtein, target: proteinTarget, color: "text-[oklch(0.90_0.22_128)]" },
-              { label: "Carbs", val: consumedCarbs, target: carbsTarget, color: "text-[oklch(0.78_0.16_60)]" },
-              { label: "Fat", val: consumedFat, target: fatTarget, color: "text-purple-400" },
+              { label: t("protein"), val: consumedProtein, target: proteinTarget, color: "text-[oklch(0.90_0.22_128)]" },
+              { label: t("carbs"), val: consumedCarbs, target: carbsTarget, color: "text-[oklch(0.78_0.16_60)]" },
+              { label: t("fat"), val: consumedFat, target: fatTarget, color: "text-purple-400" },
             ].map((m) => (
               <div key={m.label}>
                 <div className="font-mono-jetbrains text-[9px] tracking-[0.14em] text-neutral-500 uppercase">{m.label}</div>

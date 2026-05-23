@@ -8,12 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { storage, UserProfile } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
-import { ArrowLeft, Save, Edit2, User, Calendar, Weight, Target, Activity, Database } from "lucide-react";
+import { useLanguage } from "@/lib/i18n";
+import { ArrowLeft, Save, Edit2, User, Calendar, Weight, Target, Activity, Database, Globe } from "lucide-react";
 import Link from "next/link";
 
 export default function ProfilePage() {
     const router = useRouter();
     const { user, logout } = useAuth();
+    const { language, setLanguage, t } = useLanguage();
+    
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
@@ -61,7 +64,7 @@ export default function ProfilePage() {
         if (!user) return;
 
         if (!formData.age || !formData.weight || !formData.gender || !formData.goals || !formData.workoutsPerWeek) {
-            alert("Please fill in all fields");
+            alert(language === "en" ? "Please fill in all fields" : "Por favor, completa todos los campos");
             return;
         }
 
@@ -81,7 +84,7 @@ export default function ProfilePage() {
             setIsEditing(false);
         } catch (error) {
             console.error("Error saving profile:", error);
-            alert("Failed to save profile. Please try again.");
+            alert(language === "en" ? "Failed to save profile. Please try again." : "No se pudo guardar el perfil. Intenta de nuevo.");
         } finally {
             setIsSaving(false);
         }
@@ -94,10 +97,9 @@ export default function ProfilePage() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-                    <p className="mt-4 text-muted-foreground">Loading profile...</p>
+            <div className="flex items-center justify-center h-screen bg-[#0d0d0d] text-neutral-400">
+                <div className="font-mono-jetbrains text-sm">
+                    {language === "en" ? "LOADING PROFILE CONSOLE..." : "CARGANDO CONSOLA DE PERFIL..."}
                 </div>
             </div>
         );
@@ -105,12 +107,17 @@ export default function ProfilePage() {
 
     if (!profile) {
         return (
-            <div className="min-h-screen flex items-center justify-center p-4">
-                <Card className="w-full max-w-md">
+            <div className="min-h-screen flex items-center justify-center p-4 bg-[#0d0d0d]">
+                <Card className="w-full max-w-md bg-neutral-950/40 border border-white/8 rounded-none">
                     <CardContent className="pt-6 text-center">
-                        <p className="text-muted-foreground mb-4">Profile not found</p>
-                        <Button onClick={() => router.push("/onboarding")}>
-                            Complete Onboarding
+                        <p className="text-muted-foreground mb-4">
+                            {language === "en" ? "Profile not found" : "Perfil no encontrado"}
+                        </p>
+                        <Button 
+                            className="bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] rounded-none cursor-pointer"
+                            onClick={() => router.push("/onboarding")}
+                        >
+                            {language === "en" ? "Complete Onboarding" : "Completar Registro"}
                         </Button>
                     </CardContent>
                 </Card>
@@ -119,71 +126,113 @@ export default function ProfilePage() {
     }
 
     const goalLabels: Record<string, string> = {
-        lose_weight: "Lose Weight",
-        gain_weight: "Gain Weight",
-        build_muscle: "Build Muscle",
-        maintain: "Maintain Weight",
-        improve_fitness: "Improve Fitness",
+        lose_weight: language === "en" ? "Lose Weight" : "Perder Peso",
+        gain_weight: language === "en" ? "Gain Weight" : "Ganar Peso",
+        build_muscle: language === "en" ? "Build Muscle" : "Ganar Músculo",
+        maintain: language === "en" ? "Maintain Weight" : "Mantener Peso",
+        improve_fitness: language === "en" ? "Improve Fitness" : "Mejorar Estado Físico",
     };
 
     const genderLabels: Record<string, string> = {
-        male: "Male",
-        female: "Female",
-        other: "Other",
+        male: t("profile.male"),
+        female: t("profile.female"),
+        other: t("profile.other"),
+    };
+
+    const goalDescs: Record<string, { en: string; es: string }> = {
+        lose_weight: { en: "Burn fat and reduce body weight", es: "Quemar grasa y reducir peso corporal" },
+        gain_weight: { en: "Increase body weight and muscle mass", es: "Aumentar peso y masa muscular" },
+        build_muscle: { en: "Gain muscle and strength", es: "Ganar músculo y fuerza" },
+        maintain: { en: "Keep current weight and fitness level", es: "Mantener peso y nivel físico actual" },
+        improve_fitness: { en: "Enhance overall health and endurance", es: "Mejorar salud general y resistencia" },
     };
 
     return (
-        <div className="p-4 space-y-6 pb-24">
-            <header className="flex items-center gap-4">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => router.back()}
-                >
-                    <ArrowLeft className="h-5 w-5" />
-                </Button>
-                <h1 className="text-2xl font-bold flex-1">Profile</h1>
-                {!isEditing && (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setIsEditing(true)}
-                    >
-                        <Edit2 className="h-4 w-4 mr-2" />
-                        Edit
-                    </Button>
-                )}
-            </header>
+        <div className="min-h-screen bg-[#0d0d0d] text-white bg-glow-lime pb-32">
+            <div className="max-w-md mx-auto px-6 pt-16">
+                
+                {/* Header */}
+                <header className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => router.back()}
+                            className="p-1 hover:bg-neutral-900 rounded-none cursor-pointer border border-white/8 text-neutral-400 hover:text-white"
+                        >
+                            <ArrowLeft className="h-4 w-4" />
+                        </button>
+                        <h1 className="text-2xl font-medium tracking-tight">{t("profile.title")}</h1>
+                    </div>
+                    {!isEditing && (
+                        <button
+                            onClick={() => setIsEditing(true)}
+                            className="px-3 py-1 font-mono-jetbrains text-[10px] tracking-wider uppercase border border-[oklch(0.90_0.22_128)] text-[oklch(0.90_0.22_128)] hover:bg-[oklch(0.90_0.22_128)]/5 cursor-pointer rounded-none flex items-center gap-1.5"
+                        >
+                            <Edit2 className="h-3 w-3" />
+                            {t("edit")}
+                        </button>
+                    )}
+                </header>
 
-            {/* Avatar and Basic Info */}
-            <Card>
-                <CardContent className="pt-6">
-                    <div className="flex flex-col items-center space-y-4">
-                        <div className="relative">
-                            <div className="w-24 h-24 rounded-full border-4 border-primary/20 bg-primary/10 flex items-center justify-center">
-                                <User className="h-12 w-12 text-primary" />
-                            </div>
+                {/* Avatar and Basic Info */}
+                <section className="border border-white/8 bg-neutral-950/40 p-4 mb-6 relative">
+                    <div className="absolute top-0 right-0 w-1 h-full bg-neutral-500/20" />
+                    <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-none border border-white/14 bg-neutral-900 flex items-center justify-center font-mono-jetbrains text-lg font-bold text-[oklch(0.90_0.22_128)]">
+                            {user?.displayName ? user.displayName.slice(0, 2).toUpperCase() : "AT"}
                         </div>
-                        <div className="text-center">
-                            <h2 className="text-xl font-semibold">
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-medium text-white truncate leading-tight">
                                 {user?.displayName || user?.email?.split('@')[0] || 'User'}
                             </h2>
-                            <p className="text-sm text-muted-foreground">{user?.email}</p>
+                            <p className="font-mono-jetbrains text-[10px] text-neutral-500 truncate mt-1">
+                                {user?.email}
+                            </p>
                         </div>
                     </div>
-                </CardContent>
-            </Card>
+                </section>
 
-            {/* Profile Information */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Personal Information</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
+                {/* Language Selector Card */}
+                <section className="border border-white/8 bg-neutral-950/40 p-4 mb-6">
+                    <div className="flex items-center gap-2 mb-3.5">
+                        <Globe className="h-4 w-4 text-[oklch(0.90_0.22_128)]" />
+                        <span className="font-mono-jetbrains text-[9px] uppercase tracking-[0.16em] text-neutral-400 font-bold">
+                            {language === "en" ? "App Language" : "Idioma de la Aplicación"}
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <button
+                            onClick={() => setLanguage("en")}
+                            className={`p-3 font-mono-jetbrains text-[10px] tracking-wider uppercase cursor-pointer border rounded-none transition-colors ${
+                                language === "en"
+                                    ? "border-[oklch(0.90_0.22_128)] bg-[oklch(0.90_0.22_128)]/10 text-white font-semibold"
+                                    : "border-white/8 bg-neutral-950/20 text-neutral-400 hover:text-white"
+                            }`}
+                        >
+                            English
+                        </button>
+                        <button
+                            onClick={() => setLanguage("es")}
+                            className={`p-3 font-mono-jetbrains text-[10px] tracking-wider uppercase cursor-pointer border rounded-none transition-colors ${
+                                language === "es"
+                                    ? "border-[oklch(0.90_0.22_128)] bg-[oklch(0.90_0.22_128)]/10 text-white font-semibold"
+                                    : "border-white/8 bg-neutral-950/20 text-neutral-400 hover:text-white"
+                            }`}
+                        >
+                            Español
+                        </button>
+                    </div>
+                </section>
+
+                {/* Profile Information */}
+                <section className="border border-white/8 bg-neutral-950/40 p-4 mb-6">
+                    <div className="text-[10px] uppercase font-mono-jetbrains tracking-[0.16em] text-neutral-400 mb-4 border-b border-white/8 pb-2">
+                        {t("profile.personalInfo")}
+                    </div>
+
                     {isEditing ? (
-                        <>
+                        <div className="space-y-4">
                             <div>
-                                <Label htmlFor="age">Age</Label>
+                                <Label htmlFor="age" className="font-mono-jetbrains text-[9px] text-neutral-400 uppercase tracking-wider">{t("profile.age")}</Label>
                                 <Input
                                     id="age"
                                     type="number"
@@ -191,12 +240,12 @@ export default function ProfilePage() {
                                     max="120"
                                     value={formData.age}
                                     onChange={(e) => handleInputChange("age", e.target.value)}
-                                    className="mt-1"
+                                    className="mt-1 bg-neutral-900 border-white/8 text-sm text-white rounded-none font-mono-jetbrains"
                                 />
                             </div>
 
                             <div>
-                                <Label htmlFor="weight">Weight (kg)</Label>
+                                <Label htmlFor="weight" className="font-mono-jetbrains text-[9px] text-neutral-400 uppercase tracking-wider">{t("profile.weight")} (kg)</Label>
                                 <Input
                                     id="weight"
                                     type="number"
@@ -205,59 +254,53 @@ export default function ProfilePage() {
                                     step="0.1"
                                     value={formData.weight}
                                     onChange={(e) => handleInputChange("weight", e.target.value)}
-                                    className="mt-1"
+                                    className="mt-1 bg-neutral-900 border-white/8 text-sm text-white rounded-none font-mono-jetbrains"
                                 />
                             </div>
 
                             <div>
-                                <Label>Gender</Label>
-                                <div className="grid grid-cols-3 gap-3 mt-2">
+                                <Label className="font-mono-jetbrains text-[9px] text-neutral-400 uppercase tracking-wider mb-2 block">{t("profile.gender")}</Label>
+                                <div className="grid grid-cols-3 gap-2">
                                     {(["male", "female", "other"] as const).map((gender) => (
                                         <button
                                             key={gender}
+                                            type="button"
                                             onClick={() => handleInputChange("gender", gender)}
-                                            className={`p-3 rounded-lg border-2 transition-all ${
+                                            className={`p-2.5 font-mono-jetbrains text-[9px] tracking-wider uppercase border rounded-none transition-colors cursor-pointer ${
                                                 formData.gender === gender
-                                                    ? "border-primary bg-primary/10"
-                                                    : "border-border hover:border-primary/50"
+                                                    ? "border-[oklch(0.90_0.22_128)] bg-[oklch(0.90_0.22_128)]/10 text-white font-semibold"
+                                                    : "border-white/8 bg-neutral-900 text-neutral-400 hover:text-white"
                                             }`}
                                         >
-                                            <div className="text-sm font-medium capitalize">
-                                                {genderLabels[gender]}
-                                            </div>
+                                            {genderLabels[gender]}
                                         </button>
                                     ))}
                                 </div>
                             </div>
 
                             <div>
-                                <Label>Goals</Label>
-                                <div className="grid grid-cols-1 gap-2 mt-2">
-                                    {[
-                                        { value: "lose_weight", label: "Lose Weight", desc: "Burn fat and reduce body weight" },
-                                        { value: "gain_weight", label: "Gain Weight", desc: "Increase body weight and muscle mass" },
-                                        { value: "build_muscle", label: "Build Muscle", desc: "Gain muscle and strength" },
-                                        { value: "maintain", label: "Maintain Weight", desc: "Keep current weight and fitness level" },
-                                        { value: "improve_fitness", label: "Improve Fitness", desc: "Enhance overall health and endurance" },
-                                    ].map((goal) => (
+                                <Label className="font-mono-jetbrains text-[9px] text-neutral-400 uppercase tracking-wider mb-2 block">{t("profile.goal")}</Label>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {Object.keys(goalLabels).map((gValue) => (
                                         <button
-                                            key={goal.value}
-                                            onClick={() => handleInputChange("goals", goal.value)}
-                                            className={`p-3 rounded-lg border-2 text-left transition-all ${
-                                                formData.goals === goal.value
-                                                    ? "border-primary bg-primary/10"
-                                                    : "border-border hover:border-primary/50"
+                                            key={gValue}
+                                            type="button"
+                                            onClick={() => handleInputChange("goals", gValue)}
+                                            className={`p-3 text-left border rounded-none transition-colors cursor-pointer ${
+                                                formData.goals === gValue
+                                                    ? "border-[oklch(0.90_0.22_128)] bg-[oklch(0.90_0.22_128)]/10"
+                                                    : "border-white/8 bg-neutral-900 hover:border-white/20"
                                             }`}
                                         >
-                                            <div className="font-medium text-sm">{goal.label}</div>
-                                            <div className="text-xs text-muted-foreground">{goal.desc}</div>
+                                            <div className="font-medium text-xs text-white">{goalLabels[gValue]}</div>
+                                            <div className="text-[10px] text-neutral-500 mt-1">{goalDescs[gValue]?.[language] || ""}</div>
                                         </button>
                                     ))}
                                 </div>
                             </div>
 
                             <div>
-                                <Label htmlFor="workoutsPerWeek">Workouts per Week</Label>
+                                <Label htmlFor="workoutsPerWeek" className="font-mono-jetbrains text-[9px] text-neutral-400 uppercase tracking-wider">{t("profile.workoutsPerWeek")}</Label>
                                 <Input
                                     id="workoutsPerWeek"
                                     type="number"
@@ -265,17 +308,16 @@ export default function ProfilePage() {
                                     max="7"
                                     value={formData.workoutsPerWeek}
                                     onChange={(e) => handleInputChange("workoutsPerWeek", e.target.value)}
-                                    className="mt-1"
+                                    className="mt-1 bg-neutral-900 border-white/8 text-sm text-white rounded-none font-mono-jetbrains"
                                 />
                             </div>
 
                             <div className="flex gap-2 pt-2">
-                                <Button
-                                    variant="outline"
-                                    className="flex-1"
+                                <button
+                                    type="button"
+                                    className="flex-1 py-2.5 font-mono-jetbrains text-[10px] tracking-wider uppercase border border-white/8 text-neutral-400 hover:text-white cursor-pointer rounded-none"
                                     onClick={() => {
                                         setIsEditing(false);
-                                        // Reset form data
                                         setFormData({
                                             age: profile.age.toString(),
                                             weight: profile.weight.toString(),
@@ -285,117 +327,90 @@ export default function ProfilePage() {
                                         });
                                     }}
                                 >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    className="flex-1"
+                                    {t("cancel")}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="flex-1 py-2.5 bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] font-mono-jetbrains text-[10px] tracking-wider uppercase font-semibold cursor-pointer border-none rounded-none"
                                     onClick={handleSave}
                                     disabled={isSaving}
                                 >
-                                    <Save className="h-4 w-4 mr-2" />
-                                    {isSaving ? "Saving..." : "Save"}
-                                </Button>
+                                    {isSaving ? t("profile.saving") : t("save")}
+                                </button>
                             </div>
-                        </>
-                    ) : (
-                        <>
-                            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                                <Calendar className="h-5 w-5 text-muted-foreground" />
-                                <div className="flex-1">
-                                    <div className="text-sm text-muted-foreground">Age</div>
-                                    <div className="font-semibold">{profile.age} years</div>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                                <Weight className="h-5 w-5 text-muted-foreground" />
-                                <div className="flex-1">
-                                    <div className="text-sm text-muted-foreground">Weight</div>
-                                    <div className="font-semibold">{profile.weight} kg</div>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                                <User className="h-5 w-5 text-muted-foreground" />
-                                <div className="flex-1">
-                                    <div className="text-sm text-muted-foreground">Gender</div>
-                                    <div className="font-semibold">{genderLabels[profile.gender]}</div>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                                <Target className="h-5 w-5 text-muted-foreground" />
-                                <div className="flex-1">
-                                    <div className="text-sm text-muted-foreground">Goal</div>
-                                    <div className="font-semibold">{goalLabels[profile.goals]}</div>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                                <Activity className="h-5 w-5 text-muted-foreground" />
-                                <div className="flex-1">
-                                    <div className="text-sm text-muted-foreground">Workouts per Week</div>
-                                    <div className="font-semibold">{profile.workoutsPerWeek} workouts</div>
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Calorie Information */}
-            {profile.maxDailyCalories && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Daily Calorie Target</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-center">
-                            <div className="text-3xl font-bold text-primary">
-                                {profile.maxDailyCalories}
-                            </div>
-                            <p className="text-sm text-muted-foreground mt-2">
-                                Calories per day based on your goals and activity level
-                            </p>
                         </div>
-                    </CardContent>
-                </Card>
-            )}
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between py-1.5 border-b border-white/4">
+                                <span className="font-mono-jetbrains text-[9px] uppercase text-neutral-500 tracking-wider">{t("profile.age")}</span>
+                                <span className="font-mono-jetbrains text-sm font-semibold">{profile.age} {t("profile.years")}</span>
+                            </div>
 
-            {/* Developer Tools */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Developer Tools</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
+                            <div className="flex items-center justify-between py-1.5 border-b border-white/4">
+                                <span className="font-mono-jetbrains text-[9px] uppercase text-neutral-500 tracking-wider">{t("profile.weight")}</span>
+                                <span className="font-mono-jetbrains text-sm font-semibold">{profile.weight} kg</span>
+                            </div>
+
+                            <div className="flex items-center justify-between py-1.5 border-b border-white/4">
+                                <span className="font-mono-jetbrains text-[9px] uppercase text-neutral-500 tracking-wider">{t("profile.gender")}</span>
+                                <span className="font-mono-jetbrains text-sm font-semibold">{genderLabels[profile.gender]}</span>
+                            </div>
+
+                            <div className="flex items-center justify-between py-1.5 border-b border-white/4">
+                                <span className="font-mono-jetbrains text-[9px] uppercase text-neutral-500 tracking-wider">{t("profile.goal")}</span>
+                                <span className="text-sm font-medium text-white">{goalLabels[profile.goals]}</span>
+                            </div>
+
+                            <div className="flex items-center justify-between py-1.5">
+                                <span className="font-mono-jetbrains text-[9px] uppercase text-neutral-500 tracking-wider">{t("profile.workoutsPerWeek")}</span>
+                                <span className="font-mono-jetbrains text-sm font-semibold">{profile.workoutsPerWeek} {t("profile.workoutsVal")}</span>
+                            </div>
+                        </div>
+                    )}
+                </section>
+
+                {/* Calorie Information */}
+                {profile.maxDailyCalories && (
+                    <section className="border border-white/8 bg-neutral-950/40 p-4 mb-6 text-center">
+                        <div className="font-mono-jetbrains text-[9px] uppercase tracking-[0.16em] text-neutral-400 mb-3 block">
+                            {t("profile.dailyCal")}
+                        </div>
+                        <div className="font-mono-jetbrains text-3xl font-bold text-[oklch(0.90_0.22_128)]">
+                            {profile.maxDailyCalories}
+                        </div>
+                        <p className="font-mono-jetbrains text-[9px] text-neutral-500 mt-2.5 max-w-[280px] mx-auto leading-relaxed">
+                            {t("profile.dailyCalDesc")}
+                        </p>
+                    </section>
+                )}
+
+                {/* Developer Tools */}
+                <section className="border border-white/8 bg-neutral-950/40 p-4 mb-6">
+                    <div className="font-mono-jetbrains text-[9px] uppercase tracking-[0.16em] text-neutral-400 mb-3 border-b border-white/8 pb-2 block">
+                        {t("profile.devTools")}
+                    </div>
                     <Link href="/admin/seed">
-                        <Button
-                            variant="outline"
-                            className="w-full"
-                        >
-                            <Database className="h-4 w-4 mr-2" />
-                            Seed Mock Data
-                        </Button>
+                        <button className="w-full py-2.5 font-mono-jetbrains text-[9px] tracking-wider uppercase border border-white/8 text-neutral-400 hover:text-white cursor-pointer rounded-none bg-neutral-900 hover:bg-neutral-900/50 flex items-center justify-center gap-1.5">
+                            <Database className="h-3.5 w-3.5" />
+                            {t("profile.seedData")}
+                        </button>
                     </Link>
-                    <p className="text-xs text-muted-foreground">
-                        Generate 30 days of workout and meal data to test LLM suggestions
+                    <p className="font-mono-jetbrains text-[8px] text-neutral-500 mt-2.5 leading-relaxed">
+                        {t("profile.seedDesc")}
                     </p>
-                </CardContent>
-            </Card>
+                </section>
 
-            {/* Logout Button */}
-            <Card>
-                <CardContent className="pt-6">
-                    <Button
-                        variant="destructive"
-                        className="w-full"
+                {/* Logout Button */}
+                <section className="border border-white/8 bg-neutral-950/40 p-4">
+                    <button
                         onClick={handleLogout}
+                        className="w-full py-3 bg-red-950/20 border border-red-500/30 hover:border-red-500/60 font-mono-jetbrains text-[10px] tracking-wider uppercase text-red-400 hover:text-red-300 cursor-pointer rounded-none"
                     >
-                        Logout
-                    </Button>
-                </CardContent>
-            </Card>
+                        {t("profile.logout")}
+                    </button>
+                </section>
+
+            </div>
         </div>
     );
 }
-

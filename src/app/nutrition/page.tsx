@@ -19,12 +19,14 @@ import {
 import Link from "next/link";
 import { storage, Meal, UserProfile } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/i18n";
 
 type GroupByOption = "day" | "week" | "month" | "none";
 
 export default function NutritionPage() {
     const router = useRouter();
     const { user } = useAuth();
+    const { language, t } = useLanguage();
     
     const [meals, setMeals] = useState<Meal[]>([]);
     const [selectedMeals, setSelectedMeals] = useState<Set<string>>(new Set());
@@ -70,32 +72,35 @@ export default function NutritionPage() {
 
     // SVG Macro Rings configuration
     const macrosConfig = useMemo(() => [
-        { label: "Protein", val: totalProtein, target: proteinTarget, color: "oklch(0.90 0.22 128)", letter: "P" },
-        { label: "Carbs", val: totalCarbs, target: carbsTarget, color: "oklch(0.78 0.16 60)", letter: "C" },
-        { label: "Fat", val: totalFats, target: fatTarget, color: "#9b88ff", letter: "F" },
-    ], [totalProtein, proteinTarget, totalCarbs, carbsTarget, totalFats, fatTarget]);
+        { label: t("protein"), val: totalProtein, target: proteinTarget, color: "oklch(0.90 0.22 128)", letter: "P" },
+        { label: t("carbs"), val: totalCarbs, target: carbsTarget, color: "oklch(0.78 0.16 60)", letter: "C" },
+        { label: t("fat"), val: totalFats, target: fatTarget, color: "#9b88ff", letter: language === "es" ? "G" : "F" },
+    ], [totalProtein, proteinTarget, totalCarbs, carbsTarget, totalFats, fatTarget, language, t]);
 
     const groupMeals = (list: Meal[], option: GroupByOption): Record<string, Meal[]> => {
         if (option === "none") {
-            return { "All Meals": list };
+            const allKey = language === "es" ? "Todas las Comidas" : "All Meals";
+            return { [allKey]: list };
         }
 
         const grouped: Record<string, Meal[]> = {};
+        const locale = language === "es" ? "es-ES" : "en-US";
 
         list.forEach(meal => {
             const date = new Date(meal.date);
             let key: string;
 
             if (option === "day") {
-                key = date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                key = date.toLocaleDateString(locale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             } else if (option === "week") {
                 const weekStart = new Date(date);
                 weekStart.setDate(date.getDate() - date.getDay() + (date.getDay() === 0 ? -6 : 1));
-                key = `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                const datePart = weekStart.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+                key = language === "es" ? `Semana del ${datePart}` : `Week of ${datePart}`;
             } else if (option === "month") {
-                key = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+                key = date.toLocaleDateString(locale, { year: 'numeric', month: 'long' });
             } else {
-                key = "All Meals";
+                key = language === "es" ? "Todas las Comidas" : "All Meals";
             }
 
             if (!grouped[key]) {
@@ -107,7 +112,7 @@ export default function NutritionPage() {
         return grouped;
     };
 
-    const groupedMeals = useMemo(() => groupMeals(meals, groupBy), [meals, groupBy]);
+    const groupedMeals = useMemo(() => groupMeals(meals, groupBy), [meals, groupBy, language]);
 
     const toggleSelectMeal = (mealId: string) => {
         setSelectedMeals(prev => {
@@ -136,7 +141,10 @@ export default function NutritionPage() {
 
     const handleDelete = async (mealId: string) => {
         if (!user) return;
-        if (!confirm('Are you sure you want to delete this meal?')) return;
+        const confirmMsg = language === 'es' 
+            ? '¿Estás seguro de que deseas eliminar esta comida?' 
+            : 'Are you sure you want to delete this meal?';
+        if (!confirm(confirmMsg)) return;
         
         try {
             await storage.deleteMeal(user.uid, mealId);
@@ -148,13 +156,16 @@ export default function NutritionPage() {
             });
         } catch (error) {
             console.error('Error deleting meal:', error);
-            alert('Failed to delete meal');
+            alert(language === 'es' ? 'Error al eliminar la comida' : 'Failed to delete meal');
         }
     };
 
     const handleBulkDelete = async () => {
         if (!user || selectedMeals.size === 0) return;
-        if (!confirm(`Are you sure you want to delete ${selectedMeals.size} meal(s)?`)) return;
+        const confirmMsg = language === 'es'
+            ? `¿Estás seguro de que deseas eliminar ${selectedMeals.size} comida(s)?`
+            : `Are you sure you want to delete ${selectedMeals.size} meal(s)?`;
+        if (!confirm(confirmMsg)) return;
         
         try {
             await storage.deleteMeals(user.uid, Array.from(selectedMeals));
@@ -162,7 +173,7 @@ export default function NutritionPage() {
             setSelectedMeals(new Set());
         } catch (error) {
             console.error('Error deleting meals:', error);
-            alert('Failed to delete meals');
+            alert(language === 'es' ? 'Error al eliminar las comidas' : 'Failed to delete meals');
         }
     };
 
@@ -174,8 +185,9 @@ export default function NutritionPage() {
     };
 
     const dayName = useMemo(() => {
-        return new Date().toLocaleDateString('en-US', { weekday: 'long' });
-    }, []);
+        const locale = language === "es" ? "es-ES" : "en-US";
+        return new Date().toLocaleDateString(locale, { weekday: 'long' });
+    }, [language]);
 
     // Format meal dates into clock time
     const formatMealTime = (isoString: string) => {
@@ -191,13 +203,13 @@ export default function NutritionPage() {
     const getMealTimeTag = (isoString: string) => {
         try {
             const hour = new Date(isoString).getHours();
-            if (hour < 11) return "BREAKFAST";
-            if (hour < 15) return "LUNCH";
-            if (hour < 18) return "SNACK";
-            if (hour < 22) return "DINNER";
-            return "LATE SNACK";
+            if (hour < 11) return language === "es" ? "DESAYUNO" : "BREAKFAST";
+            if (hour < 15) return language === "es" ? "ALMUERZO" : "LUNCH";
+            if (hour < 18) return language === "es" ? "MERIENDA" : "SNACK";
+            if (hour < 22) return language === "es" ? "CENA" : "DINNER";
+            return language === "es" ? "SNACK TARDÍO" : "LATE SNACK";
         } catch (e) {
-            return "MEAL";
+            return language === "es" ? "COMIDA" : "MEAL";
         }
     };
 
@@ -209,9 +221,9 @@ export default function NutritionPage() {
                 <header className="flex justify-between items-end mb-6">
                     <div>
                         <div className="text-[10px] uppercase font-mono-jetbrains tracking-[0.16em] text-neutral-500 mb-1">
-                            Fuel · {dayName}
+                            {t("fuel.title")} · {dayName}
                         </div>
-                        <h1 className="text-3xl font-medium tracking-tight">Intake</h1>
+                        <h1 className="text-3xl font-medium tracking-tight">{t("fuel.intake")}</h1>
                     </div>
                     <Link href="/nutrition/log">
                         <Button className="w-10 h-10 rounded-none bg-[oklch(0.90_0.22_128)] hover:bg-[oklch(0.90_0.22_128)]/90 text-[oklch(0.20_0.06_128)] flex items-center justify-center border-none p-0 cursor-pointer">
@@ -224,13 +236,13 @@ export default function NutritionPage() {
                 <section className="flex items-end justify-between gap-6 mb-6">
                     <div className="flex-1">
                         <div className="text-[10px] uppercase font-mono-jetbrains tracking-[0.12em] text-neutral-400 mb-2">
-                            Calories Consumed
+                            {t("fuel.caloriesConsumed")}
                         </div>
                         <div className="font-mono-jetbrains text-5xl font-medium tracking-tight text-white leading-none">
                             {totalCalories.toLocaleString()}
                         </div>
                         <div className="font-mono-jetbrains text-[10px] text-neutral-500 mt-3 leading-none">
-                            {caloriesRemaining.toLocaleString()} remaining · target {calorieTarget}
+                            {caloriesRemaining.toLocaleString()} {t("remaining")} · {t("target")} {calorieTarget}
                         </div>
                     </div>
 
@@ -294,10 +306,10 @@ export default function NutritionPage() {
                     <Sparkles className="h-4 w-4 text-[oklch(0.90_0.22_128)] flex-shrink-0" />
                     <input
                         type="text"
-                        placeholder='"I had a chicken bowl..." — log via AI'
+                        placeholder={t("fuel.quickLogPlaceholder")}
                         value={aiInputText}
                         onChange={(e) => setAiInputText(e.target.value)}
-                        className="flex-1 bg-transparent border-none text-xs font-mono-jetbrains placeholder-neutral-500 focus:outline-none text-white"
+                        className="flex-1 bg-transparent border-none text-xs font-mono-jetbrains placeholder-neutral-500 focus:outline-none text-white px-1"
                     />
                     <button type="submit" className="text-neutral-400 hover:text-white cursor-pointer">
                         <Camera className="h-4 w-4" />
@@ -308,7 +320,7 @@ export default function NutritionPage() {
                 <div className="space-y-4">
                     <div className="flex justify-between items-center border-b border-white/8 pb-2">
                         <div className="text-[10px] uppercase font-mono-jetbrains tracking-[0.16em] text-neutral-400">
-                            Logged Intake ({meals.length})
+                            {t("fuel.loggedIntake")} ({meals.length})
                         </div>
                         {meals.length > 0 && (
                             <div className="flex items-center gap-2">
@@ -321,7 +333,7 @@ export default function NutritionPage() {
                                     ) : (
                                         <Square className="h-3 w-3" />
                                     )}
-                                    Select All
+                                    {t("train.selectAll")}
                                 </button>
                                 {selectedMeals.size > 0 && (
                                     <button
@@ -329,7 +341,7 @@ export default function NutritionPage() {
                                         className="flex items-center gap-1 px-2 py-1 bg-red-950/20 border border-red-500/30 hover:border-red-500/60 font-mono-jetbrains text-[8px] tracking-wider uppercase text-red-400 hover:text-red-300 cursor-pointer rounded-none"
                                     >
                                         <Trash2 className="h-3.5 w-3.5" />
-                                        Delete ({selectedMeals.size})
+                                        {t("delete")} ({selectedMeals.size})
                                     </button>
                                 )}
                             </div>
@@ -341,10 +353,10 @@ export default function NutritionPage() {
                             <div className="text-center py-12 border border-dashed border-white/8 bg-neutral-950/20">
                                 <Clock className="h-8 w-8 mx-auto mb-3 text-neutral-600 animate-pulse" />
                                 <div className="font-mono-jetbrains text-xs uppercase tracking-widest text-neutral-400">
-                                    No food logs recorded.
+                                    {t("fuel.noLogs")}
                                 </div>
                                 <Link href="/nutrition/log" className="text-[oklch(0.90_0.22_128)] font-mono-jetbrains text-[10px] tracking-wider uppercase hover:underline mt-3 block">
-                                    Record a meal manually →
+                                    {t("fuel.recordManual")}
                                 </Link>
                             </div>
                         ) : (
@@ -404,7 +416,7 @@ export default function NutritionPage() {
                                                         <div className="flex gap-2.5 font-mono-jetbrains text-[9px] text-neutral-500 leading-none">
                                                             <span>P {meal.protein}g</span>
                                                             <span>C {meal.carbs}g</span>
-                                                            <span>F {meal.fats}g</span>
+                                                            <span>{language === "es" ? "G" : "F"} {meal.fats}g</span>
                                                         </div>
                                                     </div>
 
@@ -449,3 +461,4 @@ export default function NutritionPage() {
         </div>
     );
 }
+

@@ -3,14 +3,23 @@ import { Meal, Workout, Exercise, WorkoutSet, UserProfile } from "./storage";
 // Mock database for nutrition estimation
 const FOOD_DATABASE: Record<string, { calories: number; protein: number; carbs: number; fats: number }> = {
     apple: { calories: 95, protein: 0.5, carbs: 25, fats: 0.3 },
+    manzana: { calories: 95, protein: 0.5, carbs: 25, fats: 0.3 },
     banana: { calories: 105, protein: 1.3, carbs: 27, fats: 0.3 },
+    plátano: { calories: 105, protein: 1.3, carbs: 27, fats: 0.3 },
+    platano: { calories: 105, protein: 1.3, carbs: 27, fats: 0.3 },
     chicken: { calories: 165, protein: 31, carbs: 0, fats: 3.6 },
+    pollo: { calories: 165, protein: 31, carbs: 0, fats: 3.6 },
     "chicken breast": { calories: 165, protein: 31, carbs: 0, fats: 3.6 },
+    "pechuga de pollo": { calories: 165, protein: 31, carbs: 0, fats: 3.6 },
     rice: { calories: 130, protein: 2.7, carbs: 28, fats: 0.3 },
+    arroz: { calories: 130, protein: 2.7, carbs: 28, fats: 0.3 },
     egg: { calories: 78, protein: 6, carbs: 0.6, fats: 5 },
+    huevo: { calories: 78, protein: 6, carbs: 0.6, fats: 5 },
     salad: { calories: 150, protein: 5, carbs: 10, fats: 10 },
+    ensalada: { calories: 150, protein: 5, carbs: 10, fats: 10 },
     pizza: { calories: 285, protein: 12, carbs: 36, fats: 10 },
     burger: { calories: 500, protein: 25, carbs: 40, fats: 25 },
+    hamburguesa: { calories: 500, protein: 25, carbs: 40, fats: 25 },
 };
 
 // Simple UUID generator
@@ -173,17 +182,24 @@ export const aiLogic = {
         };
     },
 
-    generateSuggestion: (): string => {
-        const suggestions = [
+    generateSuggestion: (language: "en" | "es" = "en"): string => {
+        const suggestionsEN = [
             "Based on your recent activity, I recommend a **Full Body Workout** today. Focus on compound movements like Squats and Pushups.",
             "You haven't done cardio in a while. How about a **30-minute run**?",
             "It's been a heavy week. Maybe try some **Yoga or Stretching** today?",
             "Time for **Leg Day**! Let's aim for 4 sets of Squats and Lunges.",
         ];
+        const suggestionsES = [
+            "Según tu actividad reciente, te recomiendo un **Entrenamiento de Cuerpo Completo** hoy. Enfréntate a movimientos compuestos como Sentadillas y Flexiones.",
+            "No has hecho cardio en un tiempo. ¿Qué tal una **carrera de 30 minutos**?",
+            "Ha sido una semana intensa. ¿Tal vez probar algo de **Yoga o Estiramientos** hoy?",
+            "¡Es hora del **Día de Pierna**! Busquemos hacer 4 series de Sentadillas y Zancadas.",
+        ];
+        const suggestions = language === "es" ? suggestionsES : suggestionsEN;
         return suggestions[Math.floor(Math.random() * suggestions.length)];
     },
 
-    suggestWorkoutFromHistory: (workouts: Workout[], profile?: UserProfile | null): Workout | null => {
+    suggestWorkoutFromHistory: (workouts: Workout[], profile?: UserProfile | null, language: "en" | "es" = "en"): Workout | null => {
         // Goal-based exercise recommendations
         const goalBasedExercises: Record<string, string[]> = {
             lose_weight: ["Burpees", "Mountain Climbers", "Jumping Jacks", "High Knees", "Squats", "Lunges"],
@@ -200,12 +216,15 @@ export const aiLogic = {
                 ? goalExercises.slice(0, 3)
                 : ["Push-ups", "Squats"];
 
+            let defaultName = "Full Body Starter";
+            if (profile?.goals === "build_muscle") defaultName = language === "es" ? "Creador de Fuerza" : "Strength Builder";
+            else if (profile?.goals === "lose_weight") defaultName = language === "es" ? "Quemador de Grasa" : "Fat Burner";
+            else defaultName = language === "es" ? "Iniciador de Cuerpo Completo" : "Full Body Starter";
+
             return {
                 id: generateId(),
                 date: new Date().toISOString(),
-                name: profile?.goals === "build_muscle" ? "Strength Builder" : 
-                      profile?.goals === "lose_weight" ? "Fat Burner" : 
-                      "Full Body Starter",
+                name: defaultName,
                 exercises: selectedExercises.map(exName => ({
                     id: generateId(),
                     name: exName,
@@ -329,11 +348,18 @@ export const aiLogic = {
         }
 
         // Determine workout name based on exercises
-        const workoutName = suggestedExercises.length === 1 
-            ? `${suggestedExercises[0].name} Focus`
-            : suggestedExercises.length === 2
-            ? `${suggestedExercises[0].name} & ${suggestedExercises[1].name}`
-            : "Full Body Workout";
+        let workoutName = "";
+        if (suggestedExercises.length === 1) {
+            workoutName = language === "es" 
+                ? `Enfoque en ${suggestedExercises[0].name}` 
+                : `${suggestedExercises[0].name} Focus`;
+        } else if (suggestedExercises.length === 2) {
+            workoutName = language === "es"
+                ? `${suggestedExercises[0].name} y ${suggestedExercises[1].name}`
+                : `${suggestedExercises[0].name} & ${suggestedExercises[1].name}`;
+        } else {
+            workoutName = language === "es" ? "Entrenamiento de Cuerpo Completo" : "Full Body Workout";
+        }
 
         return {
             id: generateId(),
@@ -343,31 +369,64 @@ export const aiLogic = {
         };
     },
 
-    processInput: (text: string): AIResponse => {
+    processInput: (text: string, language: "en" | "es" = "en"): AIResponse => {
         const lowerText = text.toLowerCase();
 
         // 1. Check for Meal Logging
-        if (lowerText.includes("ate") || lowerText.includes("had") || lowerText.includes("drink") || lowerText.includes("drank")) {
+        const isMealTrigger = lowerText.includes("ate") || lowerText.includes("had") || lowerText.includes("drink") || lowerText.includes("drank") || lowerText.includes("comi") || lowerText.includes("comí") || lowerText.includes("tome") || lowerText.includes("tomé") || lowerText.includes("desayun") || lowerText.includes("almorz") || lowerText.includes("cené") || lowerText.includes("cene");
+        if (isMealTrigger) {
             const meal = aiLogic.estimateNutrition(text);
             if (meal) {
                 return {
-                    text: `I've logged your meal: **${meal.name}** (${meal.calories} kcal).`,
+                    text: language === "es" 
+                        ? `He registrado tu comida: **${meal.name}** (${meal.calories} kcal).`
+                        : `I've logged your meal: **${meal.name}** (${meal.calories} kcal).`,
                     action: "LOG_MEAL",
                     data: meal,
                 };
             } else {
                 return {
-                    text: "I noticed you mentioned food, but I couldn't identify it in my database. Try saying 'I ate an apple'.",
+                    text: language === "es"
+                        ? "Noté que mencionaste comida, pero no pude identificarla en mi base de datos. Intenta diciendo 'Comí una manzana'."
+                        : "I noticed you mentioned food, but I couldn't identify it in my database. Try saying 'I ate an apple'.",
                 };
             }
         }
 
         // 2. Check for Workout Logging
-        if (lowerText.includes("did") && (lowerText.includes("sets") || lowerText.includes("reps") || lowerText.includes("workout"))) {
+        const isWorkoutTrigger = (lowerText.includes("did") || lowerText.includes("hice")) && (lowerText.includes("sets") || lowerText.includes("reps") || lowerText.includes("workout") || lowerText.includes("series") || lowerText.includes("repeticiones") || lowerText.includes("entreno") || lowerText.includes("entrenamiento"));
+        if (isWorkoutTrigger) {
             const workout = aiLogic.parseWorkout(text);
             if (workout) {
+                // translate exercise name or default workout name if Spanish
+                if (language === "es") {
+                    workout.name = "Entrenamiento por IA";
+                }
+                
+                const setsMatch = lowerText.match(/(\d+)\s*sets?/) || lowerText.match(/(\d+)\s*series/);
+                const repsMatch = lowerText.match(/(\d+)\s*reps?/) || lowerText.match(/(\d+)\s*repeticiones/);
+                let exerciseName = lowerText
+                    .replace(/i did/g, "")
+                    .replace(/hice/g, "")
+                    .replace(/sets? of/g, "")
+                    .replace(/series de/g, "")
+                    .replace(/reps?/g, "")
+                    .replace(/repeticiones/g, "")
+                    .replace(/\d+/g, "")
+                    .trim();
+                
+                if (!exerciseName) {
+                    exerciseName = language === "es" ? "Ejercicio" : "Workout";
+                } else {
+                    exerciseName = exerciseName.charAt(0).toUpperCase() + exerciseName.slice(1);
+                }
+
+                workout.exercises[0].name = exerciseName;
+
                 return {
-                    text: `Great job! I've logged your workout: **${workout.exercises[0].name}** (${workout.exercises[0].sets.length} sets).`,
+                    text: language === "es"
+                        ? `¡Buen trabajo! He registrado tu entrenamiento: **${workout.exercises[0].name}** (${workout.exercises[0].sets.length} series).`
+                        : `Great job! I've logged your workout: **${workout.exercises[0].name}** (${workout.exercises[0].sets.length} sets).`,
                     action: "LOG_WORKOUT",
                     data: workout,
                 };
@@ -375,25 +434,26 @@ export const aiLogic = {
         }
 
         // 3. Check for Suggestion
-        if (lowerText.includes("suggest") || lowerText.includes("what should i do")) {
+        const isSuggestionTrigger = lowerText.includes("suggest") || lowerText.includes("what should i do") || lowerText.includes("sugier") || lowerText.includes("suger") || lowerText.includes("que debo hacer") || lowerText.includes("qué debo hacer") || lowerText.includes("que hacer") || lowerText.includes("qué hacer");
+        if (isSuggestionTrigger) {
             return {
-                text: aiLogic.generateSuggestion(),
+                text: aiLogic.generateSuggestion(language),
                 action: "SUGGESTION",
             };
         }
 
         // 4. Default / RAG Fallback (Video search)
-        if (lowerText.includes("how to")) {
-            // This will be handled by the UI to show video, but we return text here
+        const isVideoTrigger = lowerText.includes("how to") || lowerText.includes("como hacer") || lowerText.includes("cómo hacer");
+        if (isVideoTrigger) {
             return {
-                text: "Here is a video demonstration:",
-                // The UI handles the video logic separately for now, or we could move it here.
-                // For now, let's keep the existing video logic in the UI or merge it.
+                text: language === "es" ? "Aquí tienes una demostración en video:" : "Here is a video demonstration:",
             };
         }
 
         return {
-            text: "I'm not sure I understand. You can tell me what you ate ('I ate an apple') or what you did ('I did 3 sets of pushups').",
+            text: language === "es"
+                ? "No estoy seguro de entender. Puedes decirme qué comiste ('Comí una manzana') o qué hiciste ('Hice 3 series de flexiones')."
+                : "I'm not sure I understand. You can tell me what you ate ('I ate an apple') or what you did ('I did 3 sets of pushups').",
         };
     }
 };

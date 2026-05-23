@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { storage, Workout, Meal, UserProfile } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/i18n";
 
 type TimeRange = "1W" | "1M" | "3M" | "6M" | "All";
 
@@ -74,7 +75,7 @@ function computePRs(workouts: Workout[]): { exercise: string; weight: number; da
 }
 
 // Compute Strength progression history for a specific exercise
-function computeStrengthHistory(workouts: Workout[], exerciseName: string): { dateStr: string; weight: number; date: string }[] {
+function computeStrengthHistory(workouts: Workout[], exerciseName: string, language: "en" | "es" = "en"): { dateStr: string; weight: number; date: string }[] {
     const history: { dateStr: string; weight: number; date: string }[] = [];
     const targetName = exerciseName.trim().toLowerCase();
 
@@ -87,7 +88,9 @@ function computeStrengthHistory(workouts: Workout[], exerciseName: string): { da
                 const maxWeight = ex.sets.reduce((best, s) => (s.completed && s.weight > best ? s.weight : best), 0);
                 if (maxWeight > 0) {
                     const dateObj = new Date(workout.date);
-                    const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+                    const months = language === "es"
+                        ? ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"]
+                        : ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
                     history.push({
                         dateStr: `${months[dateObj.getMonth()]} ${dateObj.getDate()}`,
                         weight: maxWeight,
@@ -112,6 +115,7 @@ function filterByRange<T extends { date: string }>(items: T[], range: TimeRange)
 
 export default function ProgressPage() {
     const { user } = useAuth();
+    const { language, t } = useLanguage();
     const [workouts, setWorkouts] = useState<Workout[]>([]);
     const [meals, setMeals] = useState<Meal[]>([]);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -179,8 +183,8 @@ export default function ProgressPage() {
 
     const strengthProgression = useMemo(() => {
         if (!selectedExercise) return [];
-        return computeStrengthHistory(filteredWorkouts, selectedExercise);
-    }, [filteredWorkouts, selectedExercise]);
+        return computeStrengthHistory(filteredWorkouts, selectedExercise, language);
+    }, [filteredWorkouts, selectedExercise, language]);
 
     // Calculate dynamic 1RM Estimate path for SVG
     const chartData = useMemo(() => {
@@ -226,12 +230,20 @@ export default function ProgressPage() {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-screen bg-[#0d0d0d] text-neutral-400">
-                <div className="font-mono-jetbrains text-sm">LOADING PERFORMANCE METRICS...</div>
+                <div className="font-mono-jetbrains text-sm">
+                    {language === "es" ? "CARGANDO MÉTRICAS DE RENDIMIENTO..." : "LOADING PERFORMANCE METRICS..."}
+                </div>
             </div>
         );
     }
 
     const ranges: TimeRange[] = ["1W", "1M", "3M", "6M", "All"];
+
+    const getRangeLabel = (r: TimeRange) => {
+        if (r === "All") return language === "es" ? "Todo" : "All";
+        if (r === "1W") return language === "es" ? "1S" : "1W";
+        return r;
+    };
 
     return (
         <div className="min-h-screen bg-[#0d0d0d] text-white bg-glow-lime pb-32">
@@ -240,9 +252,9 @@ export default function ProgressPage() {
                 {/* Header */}
                 <header className="mb-6">
                     <div className="text-[10px] uppercase font-mono-jetbrains tracking-[0.16em] text-neutral-500 mb-1">
-                        Performance
+                        {t("stats.performance")}
                     </div>
-                    <h1 className="text-3xl font-medium tracking-tight">Trends</h1>
+                    <h1 className="text-3xl font-medium tracking-tight">{t("stats.trends")}</h1>
                 </header>
 
                 {/* Range Chips */}
@@ -257,7 +269,7 @@ export default function ProgressPage() {
                                 : "bg-neutral-950/20 text-neutral-400 border-white/8 hover:text-white"
                             }`}
                         >
-                            {r}
+                            {getRangeLabel(r)}
                         </button>
                     ))}
                 </div>
@@ -269,7 +281,7 @@ export default function ProgressPage() {
                     <div className="flex justify-between items-start mb-4">
                         <div>
                             <div className="font-mono-jetbrains text-[9px] text-neutral-500 tracking-[0.12em] uppercase">
-                                Est. Max Lift progression
+                                {t("stats.maxLift")}
                             </div>
                             <div className="flex items-baseline gap-2.5 mt-2">
                                 <div className="font-mono-jetbrains text-3xl font-medium text-white leading-none">
@@ -303,7 +315,9 @@ export default function ProgressPage() {
                                     <ChevronDown className="h-2.5 w-2.5 text-neutral-500 absolute right-2 pointer-events-none" />
                                 </div>
                             ) : (
-                                <div className="font-mono-jetbrains text-[8px] text-neutral-500">NO DATA</div>
+                                <div className="font-mono-jetbrains text-[8px] text-neutral-500">
+                                    {language === "es" ? "SIN DATOS" : "NO DATA"}
+                                </div>
                             )}
                         </div>
                     </div>
@@ -350,7 +364,7 @@ export default function ProgressPage() {
                         ) : (
                             <div className="h-[140px] flex items-center justify-center border border-dashed border-white/8 bg-neutral-950/20">
                                 <p className="font-mono-jetbrains text-[9px] uppercase tracking-widest text-neutral-500 text-center px-4 leading-relaxed">
-                                    Log at least 2 sessions with {selectedExercise || "this exercise"} to render progression.
+                                    {t("stats.noDataChart")}
                                 </p>
                             </div>
                         )}
@@ -360,10 +374,10 @@ export default function ProgressPage() {
                 {/* Dense Grid stats dashboard */}
                 <section className="grid grid-cols-2 gap-0 border border-white/8 bg-neutral-950/40 mb-6">
                     {[
-                        ["Sessions", totalSessions, "this period"],
-                        ["Avg / wk", avgSessionsPerWeek, "frequency"],
-                        ["Streak", streak, "days consecutive"],
-                        ["Volume", `${totalVolumeTonnes}t`, "tonnes lifted"]
+                        [t("stats.gridSessions"), totalSessions, t("stats.period")],
+                        [t("stats.gridAvg"), avgSessionsPerWeek, t("stats.frequency")],
+                        [t("stats.gridStreak"), streak, t("stats.streakDays")],
+                        [t("stats.gridVolume"), `${totalVolumeTonnes}t`, t("stats.volumeLifted")]
                     ].map(([label, val, unit], idx) => (
                         <div 
                             key={idx} 
@@ -387,14 +401,14 @@ export default function ProgressPage() {
                 {/* PR Leaderboard */}
                 <section className="space-y-3">
                     <div className="text-[10px] uppercase font-mono-jetbrains tracking-[0.16em] text-neutral-400 border-b border-white/8 pb-2">
-                        Personal Records
+                        {t("stats.prs")}
                     </div>
                     
                     {prs.length === 0 ? (
                         <div className="text-center py-8 border border-dashed border-white/8 bg-neutral-950/20">
                             <Award className="h-6 w-6 mx-auto mb-2 text-neutral-600" />
                             <p className="font-mono-jetbrains text-[9px] uppercase tracking-wider text-neutral-500">
-                                No records logged yet.
+                                {t("stats.noRecords")}
                             </p>
                         </div>
                     ) : (
@@ -413,7 +427,7 @@ export default function ProgressPage() {
                                                 <span className="text-neutral-500 text-[10px] font-normal">kg</span>
                                                 {pr.isFresh && (
                                                     <span className="inline-flex items-center px-1 py-0.5 bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] text-[7px] font-bold tracking-widest uppercase">
-                                                        <Zap className="h-2 w-2 fill-current" /> NEW
+                                                        <Zap className="h-2 w-2 fill-current" /> {t("stats.newPr")}
                                                     </span>
                                                 )}
                                             </div>

@@ -21,6 +21,7 @@ import {
 import Link from "next/link";
 import { storage, Workout } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/i18n";
 
 type GroupByOption = "day" | "week" | "month" | "none";
 
@@ -55,6 +56,7 @@ function Sparkline({ data, w = 80, h = 20, color = "oklch(0.90 0.22 128)", fill 
 export default function WorkoutPage() {
     const router = useRouter();
     const { user } = useAuth();
+    const { language, t } = useLanguage();
     const [workouts, setWorkouts] = useState<Workout[]>([]);
     const [expandedWorkouts, setExpandedWorkouts] = useState<Set<string>>(new Set());
     const [selectedWorkouts, setSelectedWorkouts] = useState<Set<string>>(new Set());
@@ -116,7 +118,10 @@ export default function WorkoutPage() {
 
     const handleDelete = async (workoutId: string) => {
         if (!user) return;
-        if (!confirm('Are you sure you want to delete this workout?')) return;
+        const confirmMsg = language === 'es' 
+            ? '¿Estás seguro de que deseas eliminar este entrenamiento?' 
+            : 'Are you sure you want to delete this workout?';
+        if (!confirm(confirmMsg)) return;
         
         try {
             await storage.deleteWorkout(user.uid, workoutId);
@@ -128,13 +133,16 @@ export default function WorkoutPage() {
             });
         } catch (error) {
             console.error('Error deleting workout:', error);
-            alert('Failed to delete workout');
+            alert(language === 'es' ? 'Error al eliminar el entrenamiento' : 'Failed to delete workout');
         }
     };
 
     const handleBulkDelete = async () => {
         if (!user || selectedWorkouts.size === 0) return;
-        if (!confirm(`Are you sure you want to delete ${selectedWorkouts.size} workout(s)?`)) return;
+        const confirmMsg = language === 'es'
+            ? `¿Estás seguro de que deseas eliminar ${selectedWorkouts.size} entrenamiento(s)?`
+            : `Are you sure you want to delete ${selectedWorkouts.size} workout(s)?`;
+        if (!confirm(confirmMsg)) return;
         
         try {
             await storage.deleteWorkouts(user.uid, Array.from(selectedWorkouts));
@@ -142,7 +150,7 @@ export default function WorkoutPage() {
             setSelectedWorkouts(new Set());
         } catch (error) {
             console.error('Error deleting workouts:', error);
-            alert('Failed to delete workouts');
+            alert(language === 'es' ? 'Error al eliminar los entrenamientos' : 'Failed to delete workouts');
         }
     };
 
@@ -188,25 +196,28 @@ export default function WorkoutPage() {
     // Grouping logic for rendering lists
     const groupWorkouts = (list: Workout[], option: GroupByOption): Record<string, Workout[]> => {
         if (option === "none") {
-            return { "All Workouts": list };
+            const allKey = language === "es" ? "Todos los Entrenamientos" : "All Workouts";
+            return { [allKey]: list };
         }
 
         const grouped: Record<string, Workout[]> = {};
+        const locale = language === "es" ? "es-ES" : "en-US";
 
         list.forEach(workout => {
             const date = new Date(workout.date);
             let key: string;
 
             if (option === "day") {
-                key = date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                key = date.toLocaleDateString(locale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             } else if (option === "week") {
                 const weekStart = new Date(date);
                 weekStart.setDate(date.getDate() - date.getDay() + (date.getDay() === 0 ? -6 : 1));
-                key = `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                const datePart = weekStart.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+                key = language === "es" ? `Semana del ${datePart}` : `Week of ${datePart}`;
             } else if (option === "month") {
-                key = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+                key = date.toLocaleDateString(locale, { year: 'numeric', month: 'long' });
             } else {
-                key = "All Workouts";
+                key = language === "es" ? "Todos los Entrenamientos" : "All Workouts";
             }
 
             if (!grouped[key]) {
@@ -220,7 +231,7 @@ export default function WorkoutPage() {
 
     const groupedWorkouts = useMemo(() => {
         return groupWorkouts(filteredWorkouts, groupBy);
-    }, [filteredWorkouts, groupBy]);
+    }, [filteredWorkouts, groupBy, language]);
 
     // Calculate weekly snapshot metrics
     const workoutsThisWeek = useMemo(() => {
@@ -288,9 +299,9 @@ export default function WorkoutPage() {
         const yesterdayStr = yesterday.toISOString().split("T")[0];
         const workoutDateStr = w.date.split("T")[0];
 
-        let dayLabel = dateObj.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
-        if (workoutDateStr === todayStr) dayLabel = "TOD";
-        else if (workoutDateStr === yesterdayStr) dayLabel = "YST";
+        let dayLabel = dateObj.toLocaleDateString(language === "es" ? "es-ES" : "en-US", { weekday: 'short' }).toUpperCase();
+        if (workoutDateStr === todayStr) dayLabel = language === "es" ? "HOY" : "TOD";
+        else if (workoutDateStr === yesterdayStr) dayLabel = language === "es" ? "AYER" : "YST";
 
         return {
             setsCount,
@@ -301,6 +312,14 @@ export default function WorkoutPage() {
         };
     };
 
+    const getFilterLabel = (cat: string) => {
+        if (cat === "All") return language === "es" ? "Todos" : "All";
+        if (cat === "Push") return language === "es" ? "Empuje" : "Push";
+        if (cat === "Pull") return language === "es" ? "Tracción" : "Pull";
+        if (cat === "Legs") return language === "es" ? "Piernas" : "Legs";
+        return cat;
+    };
+
     return (
         <div className="min-h-screen bg-[#0d0d0d] text-white bg-glow-lime pb-32">
             <div className="max-w-md mx-auto px-6 pt-16">
@@ -309,9 +328,9 @@ export default function WorkoutPage() {
                 <header className="flex justify-between items-end mb-6">
                     <div>
                         <div className="text-[10px] uppercase font-mono-jetbrains tracking-[0.16em] text-neutral-500 mb-1">
-                            Training log
+                            {t("train.trainingLog")}
                         </div>
-                        <h1 className="text-3xl font-medium tracking-tight">Sessions</h1>
+                        <h1 className="text-3xl font-medium tracking-tight">{t("train.sessions")}</h1>
                     </div>
                     <Link href="/workout/log">
                         <Button className="w-10 h-10 rounded-none bg-[oklch(0.90_0.22_128)] hover:bg-[oklch(0.90_0.22_128)]/90 text-[oklch(0.20_0.06_128)] flex items-center justify-center border-none p-0 cursor-pointer">
@@ -325,14 +344,14 @@ export default function WorkoutPage() {
                     <div className="absolute top-0 right-0 w-1 h-full bg-[oklch(0.90_0.22_128)]" />
                     <div className="flex justify-between items-center mb-4">
                         <div className="text-[10px] uppercase font-mono-jetbrains tracking-[0.16em] text-neutral-400">
-                            This week
+                            {t("train.thisWeek")}
                         </div>
                         <Sparkline data={last7DaysVolumes} w={80} h={20} />
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                         <div>
                             <div className="text-[9px] uppercase font-mono-jetbrains tracking-[0.12em] text-neutral-500 mb-1">
-                                Sessions
+                                {t("train.sessions")}
                             </div>
                             <div className="font-mono-jetbrains text-2xl font-medium tracking-tight">
                                 {weeklySessions}<span className="text-neutral-500 text-xs ml-0.5 font-normal">/{userProfile?.workoutsPerWeek || 6}</span>
@@ -340,7 +359,7 @@ export default function WorkoutPage() {
                         </div>
                         <div>
                             <div className="text-[9px] uppercase font-mono-jetbrains tracking-[0.12em] text-neutral-500 mb-1">
-                                Volume
+                                {t("train.volume")}
                             </div>
                             <div className="font-mono-jetbrains text-2xl font-medium tracking-tight">
                                 {weeklyVolume}<span className="text-neutral-500 text-xs ml-0.5 font-normal">t</span>
@@ -348,7 +367,7 @@ export default function WorkoutPage() {
                         </div>
                         <div>
                             <div className="text-[9px] uppercase font-mono-jetbrains tracking-[0.12em] text-neutral-500 mb-1">
-                                PRs
+                                {t("train.prs")}
                             </div>
                             <div className="font-mono-jetbrains text-2xl font-medium tracking-tight">
                                 {weeklyPRs}
@@ -370,7 +389,7 @@ export default function WorkoutPage() {
                                     : "bg-neutral-950/20 text-neutral-400 border-white/8 hover:text-white"
                                 }`}
                             >
-                                {cat}
+                                {getFilterLabel(cat)}
                             </button>
                         ))}
                     </div>
@@ -389,7 +408,7 @@ export default function WorkoutPage() {
                                             : "border-transparent text-neutral-500 hover:text-neutral-300"
                                         }`}
                                     >
-                                        {opt === "none" ? "Flat" : opt}
+                                        {opt === "none" ? t("train.flat") : (language === "es" ? (opt === "day" ? "Día" : opt === "week" ? "Semana" : "Mes") : opt)}
                                     </button>
                                 ))}
                             </div>
@@ -403,7 +422,7 @@ export default function WorkoutPage() {
                                     ) : (
                                         <Square className="h-3 w-3" />
                                     )}
-                                    Select All
+                                    {t("train.selectAll")}
                                 </button>
                                 {selectedWorkouts.size > 0 && (
                                     <button
@@ -411,7 +430,7 @@ export default function WorkoutPage() {
                                         className="flex items-center gap-1 px-2 py-1 bg-red-950/20 border border-red-500/30 hover:border-red-500/60 font-mono-jetbrains text-[8px] tracking-wider uppercase text-red-400 hover:text-red-300 cursor-pointer rounded-none"
                                     >
                                         <Trash2 className="h-3 w-3" />
-                                        Delete ({selectedWorkouts.size})
+                                        {t("delete")} ({selectedWorkouts.size})
                                     </button>
                                 )}
                             </div>
@@ -425,10 +444,10 @@ export default function WorkoutPage() {
                         <div className="text-center py-12 border border-dashed border-white/8 bg-neutral-950/20">
                             <Dumbbell className="h-8 w-8 mx-auto mb-3 text-neutral-600 animate-pulse" />
                             <div className="font-mono-jetbrains text-xs uppercase tracking-widest text-neutral-400">
-                                No sessions logged.
+                                {t("train.noSessions")}
                             </div>
                             <Link href="/workout/log" className="text-[oklch(0.90_0.22_128)] font-mono-jetbrains text-[10px] tracking-wider uppercase hover:underline mt-3 block">
-                                Create your first session →
+                                {t("train.createFirst")}
                             </Link>
                         </div>
                     ) : (
@@ -467,7 +486,7 @@ export default function WorkoutPage() {
                                                         <Square className="h-4 w-4 text-neutral-600" />
                                                     )}
                                                 </button>
-
+                                
                                                 {/* Date & Day */}
                                                 <div className="w-12 flex-shrink-0">
                                                     <div className="font-mono-jetbrains text-[9px] text-neutral-500 tracking-[0.12em] uppercase leading-none">
@@ -477,7 +496,7 @@ export default function WorkoutPage() {
                                                         {dateStr}
                                                     </div>
                                                 </div>
-
+                                
                                                 {/* Details */}
                                                 <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleWorkout(workout.id)}>
                                                     <h3 className="text-sm font-medium text-white mb-1 truncate hover:text-[oklch(0.90_0.22_128)] transition-colors">
@@ -488,16 +507,16 @@ export default function WorkoutPage() {
                                                         <span>·</span>
                                                         <span>{volStr}</span>
                                                         <span>·</span>
-                                                        <span>{setsCount} sets</span>
+                                                        <span>{setsCount} {language === "es" ? "series" : "sets"}</span>
                                                     </div>
                                                 </div>
-
+                                
                                                 {/* PR / Action indicators */}
                                                 <div className="flex items-center gap-2" onClick={() => toggleWorkout(workout.id)}>
                                                     {prCount > 0 ? (
                                                         <div className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] font-mono-jetbrains text-[8px] font-bold tracking-wider uppercase leading-none">
                                                             <Zap className="h-2 w-2 fill-current" />
-                                                            {prCount} PR
+                                                            {prCount} {language === "es" ? "RÉCORD" : "PR"}
                                                         </div>
                                                     ) : (
                                                         <div className="text-neutral-600 hover:text-neutral-400">
@@ -513,7 +532,7 @@ export default function WorkoutPage() {
                                                     </button>
                                                 </div>
                                             </div>
-
+                                
                                             {/* Expanded workout sets content */}
                                             {isExpanded && (
                                                 <div className="mt-4 ml-6 p-4 border border-white/8 bg-neutral-950/40 relative">
@@ -521,19 +540,19 @@ export default function WorkoutPage() {
                                                         <button
                                                             onClick={() => handleEdit(workout)}
                                                             className="p-1 text-neutral-400 hover:text-[oklch(0.90_0.22_128)] cursor-pointer"
-                                                            title="Edit Workout"
+                                                            title={t("train.editWorkout")}
                                                         >
                                                             <Edit className="h-3.5 w-3.5" />
                                                         </button>
                                                         <button
                                                             onClick={() => handleDelete(workout.id)}
                                                             className="p-1 text-neutral-400 hover:text-red-400 cursor-pointer"
-                                                            title="Delete Workout"
+                                                            title={t("train.deleteWorkout")}
                                                         >
                                                             <Trash2 className="h-3.5 w-3.5" />
                                                         </button>
                                                     </div>
-
+                                
                                                     <div className="space-y-4">
                                                         {workout.exercises.map((ex, exIdx) => (
                                                             <div key={ex.id || exIdx} className="space-y-1.5">
@@ -549,10 +568,10 @@ export default function WorkoutPage() {
                                                                 {/* Sets table */}
                                                                 <div className="border border-white/4 divide-y divide-white/4">
                                                                     <div className="grid grid-cols-4 gap-2 bg-neutral-900/50 p-1.5 font-mono-jetbrains text-[8px] tracking-wider uppercase text-neutral-500">
-                                                                        <div>Set</div>
-                                                                        <div>Weight</div>
-                                                                        <div>Reps</div>
-                                                                        <div className="text-right">Status</div>
+                                                                        <div>{t("set")}</div>
+                                                                        <div>{t("weight")}</div>
+                                                                        <div>{t("reps")}</div>
+                                                                        <div className="text-right">{t("status")}</div>
                                                                     </div>
                                                                     {ex.sets.map((set, setIdx) => (
                                                                         <div 
@@ -564,7 +583,7 @@ export default function WorkoutPage() {
                                                                             <div className="text-white">{set.reps}</div>
                                                                             <div className="text-right text-[8px]">
                                                                                 {set.completed ? (
-                                                                                    <span className="text-[oklch(0.90_0.22_128)] font-bold">✓ DONE</span>
+                                                                                    <span className="text-[oklch(0.90_0.22_128)] font-bold">✓ {t("done").toUpperCase()}</span>
                                                                                 ) : (
                                                                                     <span className="text-neutral-500">-</span>
                                                                                 )}

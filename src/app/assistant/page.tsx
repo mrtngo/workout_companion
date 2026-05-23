@@ -23,6 +23,7 @@ import { storage, Conversation, ConversationMessage } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import { apiUrl } from "@/lib/api";
+import { useLanguage } from "@/lib/i18n";
 
 interface Message {
     id: string;
@@ -37,6 +38,7 @@ export default function AssistantPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user } = useAuth();
+    const { language, t } = useLanguage();
     
     const messageParam = searchParams.get("message");
 
@@ -236,6 +238,7 @@ export default function AssistantPage() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         input: userMessage.content,
+                        language: language,
                         context: {
                             recentWorkouts: recentWorkouts.slice(0, 2),
                             recentMeals: recentMeals.slice(0, 2),
@@ -291,7 +294,7 @@ export default function AssistantPage() {
             console.warn("API error or timeout, falling back to mock AI:", error);
 
             // Mock AI processing fallback
-            const mockResponse = aiLogic.processInput(userMessage.content);
+            const mockResponse = aiLogic.processInput(userMessage.content, language);
 
             if (mockResponse.action === "LOG_MEAL" && mockResponse.data) {
                 await storage.saveMeal(user.uid, mockResponse.data);
@@ -331,22 +334,22 @@ export default function AssistantPage() {
             <header className="pt-16 pb-4 px-6 border-b border-white/8 bg-[#0d0d0d]/90 backdrop-blur-md sticky top-0 z-20 flex justify-between items-end max-w-md mx-auto w-full">
                 <div>
                     <div className="text-[10px] uppercase font-mono-jetbrains tracking-[0.16em] text-neutral-500 mb-1">
-                        Coach
+                        {t("coach.title")}
                     </div>
-                    <h1 className="text-2xl font-medium tracking-tight">Conversation</h1>
+                    <h1 className="text-2xl font-medium tracking-tight">{t("coach.conversation")}</h1>
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 bg-[oklch(0.90_0.22_128)] rounded-full animate-pulse-live" />
                         <span className="font-mono-jetbrains text-[8px] text-neutral-400 tracking-wider uppercase">
-                            Context Loaded
+                            {t("coach.context")}
                         </span>
                     </div>
                     <button 
                         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                         className="px-2.5 py-1 border border-white/14 hover:border-white/30 bg-neutral-950/20 text-neutral-400 hover:text-white font-mono-jetbrains text-[9px] tracking-wider uppercase cursor-pointer rounded-none"
                     >
-                        {isSidebarOpen ? "Chat" : "History"}
+                        {isSidebarOpen ? t("coach.chat") : t("coach.history")}
                     </button>
                 </div>
             </header>
@@ -361,20 +364,24 @@ export default function AssistantPage() {
                 )}>
                     <div className="p-4 border-b border-white/8 flex justify-between items-center bg-neutral-950/40">
                         <div className="font-mono-jetbrains text-[10px] tracking-[0.16em] uppercase text-neutral-400">
-                            Saved Sessions
+                            {t("coach.savedSessions")}
                         </div>
                         <button
                             onClick={handleCreateConversation}
                             className="px-2.5 py-1 border border-[oklch(0.90_0.22_128)] text-[oklch(0.90_0.22_128)] font-mono-jetbrains text-[9px] tracking-wider uppercase cursor-pointer rounded-none flex items-center gap-1 hover:bg-[oklch(0.90_0.22_128)]/5"
                         >
-                            <Plus className="h-3 w-3" /> New
+                            <Plus className="h-3 w-3" /> {t("coach.new")}
                         </button>
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-2">
                         {isLoadingConversations ? (
-                            <div className="text-center py-6 font-mono-jetbrains text-xs text-neutral-600">LOADING LOGS...</div>
+                            <div className="text-center py-6 font-mono-jetbrains text-xs text-neutral-600">
+                                {language === "es" ? "CARGANDO REGISTROS..." : "LOADING LOGS..."}
+                            </div>
                         ) : conversations.length === 0 ? (
-                            <div className="text-center py-6 font-mono-jetbrains text-xs text-neutral-600">NO CONVERSATIONS</div>
+                            <div className="text-center py-6 font-mono-jetbrains text-xs text-neutral-600">
+                                {language === "es" ? "SIN CONVERSACIONES" : "NO CONVERSATIONS"}
+                            </div>
                         ) : (
                             conversations.map((c) => (
                                 <button
@@ -390,7 +397,7 @@ export default function AssistantPage() {
                                     <div className="min-w-0 flex-1 pr-3">
                                         <div className="text-xs font-medium text-white truncate">{c.title}</div>
                                         <div className="font-mono-jetbrains text-[8px] text-neutral-500 mt-1 uppercase">
-                                            {new Date(c.updatedAt).toLocaleDateString()}
+                                            {new Date(c.updatedAt).toLocaleDateString(language === "es" ? "es-ES" : "en-US")}
                                         </div>
                                     </div>
                                     <MessageSquare className={cn(
@@ -423,7 +430,7 @@ export default function AssistantPage() {
                                         "font-mono-jetbrains text-[9px] tracking-wider uppercase font-bold",
                                         isUser ? "text-neutral-400" : "text-[oklch(0.90_0.22_128)]"
                                     )}>
-                                        {isUser ? "You" : "Coach"}
+                                        {isUser ? t("coach.you") : t("coach.coach")}
                                     </span>
                                     <span className="font-mono-jetbrains text-[8px] text-neutral-600">
                                         {formatBubbleTime(message.timestamp)}
@@ -445,7 +452,7 @@ export default function AssistantPage() {
                                         )}>
                                             <img
                                                 src={message.imageUrl}
-                                                alt="Meal log attachment"
+                                                alt={language === "es" ? "Adjunto de comida" : "Meal log attachment"}
                                                 className="w-full h-auto object-cover max-h-48"
                                             />
                                         </div>
@@ -481,17 +488,17 @@ export default function AssistantPage() {
                                             <div className="absolute top-0 left-0 w-[2px] h-full bg-[oklch(0.90_0.22_128)]" />
                                             <div>
                                                 <div className="font-mono-jetbrains text-[8px] tracking-[0.14em] text-neutral-500 uppercase leading-none">
-                                                    Proposed Swap
+                                                    {t("coach.proposedSwap")}
                                                 </div>
                                                 <div className="text-[11px] font-medium text-white mt-1.5 leading-tight">
-                                                    Legs · Heavy → Recovery · Z2 40′
+                                                    {language === "es" ? "Piernas · Pesado → Recuperación · Z2 40′" : "Legs · Heavy → Recovery · Z2 40′"}
                                                 </div>
                                             </div>
                                             <button 
-                                                onClick={() => alert("Proposed swap applied to today's schedule!")}
+                                                onClick={() => alert(language === "es" ? "¡El cambio propuesto se aplicó a tu agenda de hoy!" : "Proposed swap applied to today's schedule!")}
                                                 className="px-2.5 py-1 bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] border-none font-mono-jetbrains text-[8px] font-bold tracking-wider uppercase cursor-pointer rounded-none"
                                             >
-                                                Apply
+                                                {t("coach.apply")}
                                             </button>
                                         </div>
                                     )}
@@ -505,9 +512,9 @@ export default function AssistantPage() {
                         <div className="space-y-2.5">
                             <div className="flex items-center gap-2">
                                 <span className="font-mono-jetbrains text-[9px] tracking-wider uppercase font-bold text-[oklch(0.90_0.22_128)]">
-                                    Coach
+                                    {t("coach.coach")}
                                 </span>
-                                <span className="font-mono-jetbrains text-[8px] text-neutral-600">typing</span>
+                                <span className="font-mono-jetbrains text-[8px] text-neutral-600">{t("coach.typing")}</span>
                             </div>
                             <div className="pl-3.5 border-l-2 border-[oklch(0.90_0.22_128)]">
                                 <div className="flex gap-1.5 py-2">
@@ -561,14 +568,14 @@ export default function AssistantPage() {
                             disabled={isLoading || !currentConversationId}
                             onClick={() => imageInputRef.current?.click()}
                             className="text-neutral-500 hover:text-white cursor-pointer disabled:opacity-40 p-1 flex-shrink-0"
-                            title="Log meal photo"
+                            title={language === "es" ? "Tomar foto de comida" : "Log meal photo"}
                         >
                             <Camera className="h-4.5 w-4.5" />
                         </button>
                         <input
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            placeholder="Ask anything or log details..."
+                            placeholder={t("coach.askPlaceholder")}
                             disabled={isLoading || !currentConversationId}
                             className="flex-1 bg-transparent border-none text-xs font-mono-jetbrains placeholder-neutral-500 focus:outline-none text-white px-1"
                         />

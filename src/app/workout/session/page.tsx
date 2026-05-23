@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { storage, Workout, Exercise, WorkoutSet } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/i18n";
 
 // Format seconds into MM:SS
 function formatTime(totalSeconds: number) {
@@ -29,6 +30,7 @@ export default function SessionScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const { language, t } = useLanguage();
   
   const wodId = searchParams.get("wodId");
 
@@ -37,7 +39,7 @@ export default function SessionScreen() {
   const [isPaused, setIsPaused] = useState(false);
 
   // Workout state
-  const [workoutName, setWorkoutName] = useState("Live Session");
+  const [workoutName, setWorkoutName] = useState(language === "es" ? "Sesión en Vivo" : "Live Session");
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [activeExIdx, setActiveExIdx] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,7 +68,7 @@ export default function SessionScreen() {
         const saved = localStorage.getItem(`active_session_${user.uid}`);
         if (saved) {
           const parsed = JSON.parse(saved);
-          setWorkoutName(parsed.workoutName || "Live Session");
+          setWorkoutName(parsed.workoutName || (language === "es" ? "Sesión en Vivo" : "Live Session"));
           setExercises(parsed.exercises || []);
           setActiveExIdx(parsed.activeExIdx || 0);
           setDuration(parsed.duration || 0);
@@ -85,7 +87,7 @@ export default function SessionScreen() {
           const todayDate = new Date().toISOString().split("T")[0];
           const wod = await storage.getWorkoutOfDay(user.uid, todayDate);
           if (wod && wod.id === wodId) {
-            setWorkoutName(wod.workout.name || "Chest & Triceps");
+            setWorkoutName(wod.workout.name || (language === "es" ? "Pecho & Tríceps" : "Chest & Triceps"));
             setExercises(wod.workout.exercises || []);
             setIsLoading(false);
             return;
@@ -93,11 +95,11 @@ export default function SessionScreen() {
         }
 
         // Default layout
-        setWorkoutName("Chest & Triceps");
+        setWorkoutName(language === "es" ? "Pecho & Tríceps" : "Chest & Triceps");
         setExercises([
           {
             id: "ex-1",
-            name: "Bench Press",
+            name: language === "es" ? "Press de Banca" : "Bench Press",
             group: "PUSH",
             sets: [
               { id: "set-1", weight: 80, reps: 8, completed: false },
@@ -107,7 +109,7 @@ export default function SessionScreen() {
           },
           {
             id: "ex-2",
-            name: "Incline DB Press",
+            name: language === "es" ? "Press Inclinado con Mancuernas" : "Incline DB Press",
             group: "PUSH",
             sets: [
               { id: "set-4", weight: 32, reps: 8, completed: false },
@@ -123,7 +125,7 @@ export default function SessionScreen() {
     };
 
     loadSession();
-  }, [user, wodId]);
+  }, [user, wodId, language]);
 
   // 2. Active Session Autosave
   useEffect(() => {
@@ -299,7 +301,7 @@ export default function SessionScreen() {
   const handleFinishWorkout = async () => {
     if (!user) return;
     if (exercises.length === 0) {
-      alert("Please add at least one exercise before logging.");
+      alert(t("session.alertEx"));
       return;
     }
 
@@ -313,7 +315,7 @@ export default function SessionScreen() {
       .filter((ex) => ex.sets.length > 0);
 
     if (processedExercises.length === 0) {
-      alert("No valid exercises with weights and reps logged!");
+      alert(t("session.alertSets"));
       return;
     }
 
@@ -339,13 +341,13 @@ export default function SessionScreen() {
       router.push("/workout");
     } catch (error) {
       console.error("Error saving workout:", error);
-      alert("Failed to save workout. Please try again.");
+      alert(language === "es" ? "No se pudo guardar el entrenamiento. Por favor intenta de nuevo." : "Failed to save workout. Please try again.");
     }
   };
 
   // Discard workout
   const handleDiscardWorkout = () => {
-    if (confirm("Are you sure you want to discard this live session? All progress will be lost.")) {
+    if (confirm(t("session.discard"))) {
       if (user) {
         localStorage.removeItem(`active_session_${user.uid}`);
       }
@@ -356,7 +358,9 @@ export default function SessionScreen() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-[#0d0d0d] text-neutral-400">
-        <div className="font-mono-jetbrains text-sm">INITIALIZING ACTIVE TIMER...</div>
+        <div className="font-mono-jetbrains text-sm">
+          {language === "es" ? "INICIALIZANDO TEMPORIZADOR ACTIVO..." : "INITIALIZING ACTIVE TIMER..."}
+        </div>
       </div>
     );
   }
@@ -378,7 +382,7 @@ export default function SessionScreen() {
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse-live" />
             <span className="font-mono-jetbrains text-[9px] text-red-500 tracking-[0.14em] uppercase font-bold">
-              Recording
+              {t("session.recording")}
             </span>
           </div>
           <div className="font-mono-jetbrains text-sm font-semibold tracking-wider text-white">
@@ -388,14 +392,14 @@ export default function SessionScreen() {
             <button
               onClick={() => setIsPaused(!isPaused)}
               className="w-8 h-8 border border-white/14 bg-neutral-950/20 text-neutral-400 hover:text-white flex items-center justify-center cursor-pointer rounded-none"
-              title={isPaused ? "Resume Session" : "Pause Session"}
+              title={isPaused ? (language === "es" ? "Reanudar Sesión" : "Resume Session") : (language === "es" ? "Pausar Sesión" : "Pause Session")}
             >
               {isPaused ? <Play className="h-3.5 w-3.5 fill-current" /> : <Pause className="h-3.5 w-3.5" />}
             </button>
             <button
               onClick={handleDiscardWorkout}
               className="w-8 h-8 border border-white/14 bg-neutral-950/20 text-neutral-400 hover:text-red-400 flex items-center justify-center cursor-pointer rounded-none"
-              title="Discard Workout"
+              title={language === "es" ? "Descartar Entrenamiento" : "Discard Workout"}
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -428,7 +432,7 @@ export default function SessionScreen() {
             
             <div className="text-center">
               <div className="font-mono-jetbrains text-[9px] text-neutral-500 tracking-[0.14em] uppercase mb-1">
-                Exercise {activeExIdx + 1} of {exercises.length}
+                {t("session.exercise")} {activeExIdx + 1} {t("session.of")} {exercises.length}
               </div>
               <h2 className="text-lg font-medium text-white truncate max-w-[200px]">
                 {currentExercise?.name}
@@ -457,11 +461,11 @@ export default function SessionScreen() {
               <div className="absolute top-0 right-0 w-1 h-full bg-[oklch(0.90_0.22_128)]" />
               
               <div className="grid grid-cols-5 gap-2 pb-2 mb-2 border-b border-white/8 font-mono-jetbrains text-[9px] tracking-wider uppercase text-neutral-500">
-                <div>Set</div>
-                <div>Weight (kg)</div>
-                <div>Reps</div>
+                <div>{t("set")}</div>
+                <div>{t("weight")} (kg)</div>
+                <div>{t("reps")}</div>
                 <div>RPE</div>
-                <div className="text-right">Log</div>
+                <div className="text-right">{language === "es" ? "Reg." : "Log"}</div>
               </div>
 
               <div className="divide-y divide-white/4">
@@ -488,34 +492,34 @@ export default function SessionScreen() {
                       {/* Weight Input */}
                       <div>
                         <input
-                          type="number"
-                          value={set.weight || ""}
-                          placeholder="kg"
-                          disabled={set.completed}
-                          onChange={(e) => handleSetChange(set.id, "weight", parseFloat(e.target.value) || 0)}
-                          className="w-full bg-neutral-900 border border-white/8 font-mono-jetbrains text-sm px-1.5 py-1 text-white focus:outline-none focus:border-[oklch(0.90_0.22_128)] disabled:opacity-40 disabled:border-transparent rounded-none"
+                           type="number"
+                           value={set.weight || ""}
+                           placeholder="kg"
+                           disabled={set.completed}
+                           onChange={(e) => handleSetChange(set.id, "weight", parseFloat(e.target.value) || 0)}
+                           className="w-full bg-neutral-900 border border-white/8 font-mono-jetbrains text-sm px-1.5 py-1 text-white focus:outline-none focus:border-[oklch(0.90_0.22_128)] disabled:opacity-40 disabled:border-transparent rounded-none"
                         />
                       </div>
 
                       {/* Reps Input */}
                       <div>
                         <input
-                          type="number"
-                          value={set.reps || ""}
-                          placeholder="reps"
-                          disabled={set.completed}
-                          onChange={(e) => handleSetChange(set.id, "reps", parseInt(e.target.value) || 0)}
-                          className="w-full bg-neutral-900 border border-white/8 font-mono-jetbrains text-sm px-1.5 py-1 text-white focus:outline-none focus:border-[oklch(0.90_0.22_128)] disabled:opacity-40 disabled:border-transparent rounded-none"
+                           type="number"
+                           value={set.reps || ""}
+                           placeholder="reps"
+                           disabled={set.completed}
+                           onChange={(e) => handleSetChange(set.id, "reps", parseInt(e.target.value) || 0)}
+                           className="w-full bg-neutral-900 border border-white/8 font-mono-jetbrains text-sm px-1.5 py-1 text-white focus:outline-none focus:border-[oklch(0.90_0.22_128)] disabled:opacity-40 disabled:border-transparent rounded-none"
                         />
                       </div>
 
                       {/* RPE Input */}
                       <div>
                         <select
-                          value={(set as any).rpe || ""}
-                          disabled={set.completed}
-                          onChange={(e) => handleSetChange(set.id, "rpe", parseInt(e.target.value) || 0)}
-                          className="w-full bg-neutral-900 border border-white/8 font-mono-jetbrains text-xs px-1 py-1.5 text-white focus:outline-none focus:border-[oklch(0.90_0.22_128)] disabled:opacity-40 disabled:border-transparent rounded-none"
+                           value={(set as any).rpe || ""}
+                           disabled={set.completed}
+                           onChange={(e) => handleSetChange(set.id, "rpe", parseInt(e.target.value) || 0)}
+                           className="w-full bg-neutral-900 border border-white/8 font-mono-jetbrains text-xs px-1 py-1.5 text-white focus:outline-none focus:border-[oklch(0.90_0.22_128)] disabled:opacity-40 disabled:border-transparent rounded-none"
                         >
                           <option value="">-</option>
                           {[10, 9.5, 9, 8.5, 8, 7.5, 7, 6.5, 6, 5].map((val) => (
@@ -527,18 +531,18 @@ export default function SessionScreen() {
                       {/* Complete Checkbox */}
                       <div className="flex justify-end items-center gap-1.5">
                         <button
-                          onClick={() => toggleSetCompleted(set.id)}
-                          className={`w-6 h-6 border flex items-center justify-center cursor-pointer transition-colors rounded-none ${
-                            set.completed
-                              ? "bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] border-[oklch(0.90_0.22_128)]"
-                              : "border-white/14 text-transparent hover:border-white/40"
-                          }`}
+                           onClick={() => toggleSetCompleted(set.id)}
+                           className={`w-6 h-6 border flex items-center justify-center cursor-pointer transition-colors rounded-none ${
+                             set.completed
+                               ? "bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] border-[oklch(0.90_0.22_128)]"
+                               : "border-white/14 text-transparent hover:border-white/40"
+                           }`}
                         >
                           <Check className="h-3.5 w-3.5 stroke-[3]" />
                         </button>
                         <button
-                          onClick={() => handleDeleteSet(set.id)}
-                          className="p-1 text-neutral-600 hover:text-red-400 cursor-pointer"
+                           onClick={() => handleDeleteSet(set.id)}
+                           className="p-1 text-neutral-600 hover:text-red-400 cursor-pointer"
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>
@@ -553,7 +557,7 @@ export default function SessionScreen() {
                 onClick={handleAddSet}
                 className="w-full mt-3 py-2 border border-dashed border-white/14 bg-neutral-950/20 hover:bg-neutral-900/30 text-neutral-400 hover:text-white font-mono-jetbrains text-[9px] tracking-widest uppercase flex items-center justify-center gap-1 cursor-pointer rounded-none"
               >
-                <Plus className="h-3.5 w-3.5" /> Add Set
+                <Plus className="h-3.5 w-3.5" /> {t("session.addSet")}
               </button>
             </div>
 
@@ -563,7 +567,7 @@ export default function SessionScreen() {
                 onClick={() => toggleSetCompleted(nextSetToLog.id)}
                 className="w-full py-4 bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] border-none font-mono-jetbrains text-xs font-bold tracking-[0.16em] uppercase hover:opacity-95 active:scale-[0.98] transition-transform cursor-pointer rounded-none"
               >
-                Log set {currentExercise.sets.indexOf(nextSetToLog) + 1} → {nextSetToLog.weight > 0 ? `${nextSetToLog.weight}kg` : "BW"} · {nextSetToLog.reps} reps
+                {t("session.logSet")} {currentExercise.sets.indexOf(nextSetToLog) + 1} → {nextSetToLog.weight > 0 ? `${nextSetToLog.weight}kg` : (language === "es" ? "PC" : "BW")} · {nextSetToLog.reps} reps
               </button>
             )}
           </div>
@@ -571,7 +575,7 @@ export default function SessionScreen() {
           <div className="text-center py-10 border border-dashed border-white/8 bg-neutral-950/20">
             <AlertCircle className="h-6 w-6 mx-auto mb-2 text-neutral-500" />
             <p className="font-mono-jetbrains text-[10px] tracking-wider uppercase text-neutral-400">
-              No exercises added.
+              {language === "es" ? "No se han agregado ejercicios." : "No exercises added."}
             </p>
           </div>
         )}
@@ -582,13 +586,13 @@ export default function SessionScreen() {
           {isResting && <div className="absolute top-0 left-0 w-1 h-full bg-[oklch(0.90_0.22_128)] animate-pulse" />}
 
           <div>
-            <div className="font-mono-jetbrains text-[9px] text-neutral-500 tracking-[0.12em] uppercase">Rest</div>
+            <div className="font-mono-jetbrains text-[9px] text-neutral-500 tracking-[0.12em] uppercase">{t("session.rest")}</div>
             <div className="font-mono-jetbrains text-3xl font-medium tracking-tight mt-1.5">
               {isResting ? formatTime(restTarget - restElapsed) : "00:00"}
             </div>
             <div className="flex gap-2 items-center mt-2">
               <span className="font-mono-jetbrains text-[8px] text-neutral-500 tracking-wider uppercase">
-                Target: {formatTime(restTarget)}
+                {t("session.target")}: {formatTime(restTarget)}
               </span>
               <button
                 onClick={() => setRestTarget((prev) => prev + 30)}
@@ -631,17 +635,17 @@ export default function SessionScreen() {
               onClick={() => setShowAddExForm(true)}
               className="w-full py-3 border border-white/8 hover:border-white/20 bg-neutral-950/20 text-neutral-400 hover:text-white font-mono-jetbrains text-[10px] tracking-wider uppercase flex items-center justify-center gap-1.5 cursor-pointer rounded-none"
             >
-              <PlusCircle className="h-4 w-4" /> Add Exercise to Session
+              <PlusCircle className="h-4 w-4" /> {t("session.addEx")}
             </button>
           ) : (
             <form onSubmit={handleAddExercise} className="border border-white/8 bg-neutral-950/40 p-4 space-y-3">
               <div className="font-mono-jetbrains text-[9px] uppercase tracking-wider text-neutral-400">
-                New Exercise
+                {t("session.newEx")}
               </div>
               <div className="space-y-2">
                 <input
                   type="text"
-                  placeholder="Exercise Name (e.g. Squat)"
+                  placeholder={t("session.exName")}
                   value={newExName}
                   onChange={(e) => setNewExName(e.target.value)}
                   className="w-full bg-neutral-900 border border-white/8 font-mono-jetbrains text-xs px-3 py-2 text-white focus:outline-none focus:border-[oklch(0.90_0.22_128)] rounded-none"
@@ -649,7 +653,7 @@ export default function SessionScreen() {
                 />
                 <input
                   type="text"
-                  placeholder="Target Category (e.g. LEGS, PULL, CORE)"
+                  placeholder={t("session.exCat")}
                   value={newExGroup}
                   onChange={(e) => setNewExGroup(e.target.value)}
                   className="w-full bg-neutral-900 border border-white/8 font-mono-jetbrains text-xs px-3 py-2 text-white focus:outline-none focus:border-[oklch(0.90_0.22_128)] rounded-none"
@@ -661,13 +665,13 @@ export default function SessionScreen() {
                   onClick={() => setShowAddExForm(false)}
                   className="px-3 py-1.5 border border-white/8 font-mono-jetbrains text-[9px] tracking-wider uppercase text-neutral-400 hover:text-white cursor-pointer rounded-none"
                 >
-                  Cancel
+                  {t("cancel")}
                 </button>
                 <button
                   type="submit"
                   className="px-3 py-1.5 bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] border-none font-mono-jetbrains text-[9px] tracking-wider uppercase font-semibold cursor-pointer rounded-none"
                 >
-                  Add Exercise
+                  {language === "es" ? "Agregar Ejercicio" : "Add Exercise"}
                 </button>
               </div>
             </form>
@@ -680,7 +684,7 @@ export default function SessionScreen() {
             onClick={handleFinishWorkout}
             className="w-full py-4 border border-[oklch(0.90_0.22_128)] bg-[oklch(0.90_0.22_128)] hover:bg-[oklch(0.90_0.22_128)]/90 text-[oklch(0.20_0.06_128)] font-mono-jetbrains text-xs font-bold tracking-[0.2em] uppercase transition-all shadow-[0_6px_20px_rgba(168,232,55,0.15)] hover:shadow-[0_8px_24px_rgba(168,232,55,0.25)] active:scale-[0.98] cursor-pointer rounded-none"
           >
-            Finish Workout & Save
+            {t("session.finish")}
           </button>
         </div>
 
