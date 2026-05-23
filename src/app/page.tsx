@@ -1,78 +1,76 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { Activity, Flame, Trophy, Sparkles, Send, LogOut, CheckCircle2, Dumbbell, User } from "lucide-react";
-import { storage, WorkoutOfDay, UserProfile } from "@/lib/storage";
-import { aiLogic } from "@/lib/ai-logic";
 import { useRouter } from "next/navigation";
+import { 
+  Play, 
+  Flame, 
+  Dumbbell, 
+  Activity, 
+  Clock, 
+  Plus, 
+  User, 
+  CheckCircle2, 
+  Sparkles,
+  ArrowRight,
+  TrendingUp
+} from "lucide-react";
+import { storage, Workout, Meal, WorkoutOfDay, UserProfile } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
+import { apiUrl } from "@/lib/api";
+import { cn } from "@/lib/utils";
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default function Home() {
   const router = useRouter();
-  const { user, logout } = useAuth();
-  const [stats, setStats] = useState({ workouts: 0, calories: 0 });
-  const [suggestion, setSuggestion] = useState("");
-  const [quickLog, setQuickLog] = useState("");
-  const [ultrahumanData, setUltrahumanData] = useState<any>(null);
-  const [workoutOfDay, setWorkoutOfDay] = useState<WorkoutOfDay | null>(null);
-  const [isLoadingWOD, setIsLoadingWOD] = useState(true);
+  const { user } = useAuth();
+  
+  const [now, setNow] = useState<Date | null>(null);
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [meals, setMeals] = useState<Meal[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [workoutOfDay, setWorkoutOfDay] = useState<WorkoutOfDay | null>(null);
+  const [ultrahumanData, setUltrahumanData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    setNow(new Date());
+    const clockInterval = setInterval(() => setNow(new Date()), 1000 * 60);
+    return () => clearInterval(clockInterval);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
 
     const loadData = async () => {
-      // Load stats
-      const workouts = await storage.getWorkouts(user.uid);
-      const meals = await storage.getMeals(user.uid);
+      try {
+        const [w, m, profile] = await Promise.all([
+          storage.getWorkouts(user.uid),
+          storage.getMeals(user.uid),
+          storage.getUserProfile(user.uid),
+        ]);
+        setWorkouts(w);
+        setMeals(m);
+        setUserProfile(profile);
 
-      // Simple weekly workout count (mock logic for now, just counts all)
-      const workoutCount = workouts.length;
-
-      // Daily calories
-      const today = new Date().toISOString().split('T')[0];
-      const dailyCalories = meals
-        .filter(m => m.date.startsWith(today))
-        .reduce((acc, m) => acc + m.calories, 0);
-
-      setStats({ workouts: workoutCount, calories: dailyCalories });
-
-      // Load user profile
-      const profile = await storage.getUserProfile(user.uid);
-      setUserProfile(profile);
-
-      // Load or generate workout of the day
-      const todayDate = new Date().toISOString().split('T')[0];
-      let wod = await storage.getWorkoutOfDay(user.uid, todayDate);
-      
-      if (!wod) {
-        // Generate a new suggestion based on history and profile
-        const suggestedWorkout = aiLogic.suggestWorkoutFromHistory(workouts, profile);
-        if (suggestedWorkout) {
-          const newWOD: WorkoutOfDay = {
-            id: "",
-            workout: suggestedWorkout,
-            suggestedAt: new Date().toISOString(),
-            status: "suggested",
-            date: todayDate,
-          };
-          const wodId = await storage.saveWorkoutOfDay(user.uid, newWOD);
-          wod = { ...newWOD, id: wodId };
-        }
+        // Load Workout of Day
+        const todayDate = new Date().toISOString().split("T")[0];
+        const wod = await storage.getWorkoutOfDay(user.uid, todayDate);
+        setWorkoutOfDay(wod);
+      } catch (err) {
+        console.error("Error loading home data:", err);
+      } finally {
+        setIsLoading(false);
       }
-      
-      setWorkoutOfDay(wod);
-      setIsLoadingWOD(false);
     };
 
     loadData();
 
     // Fetch Ultrahuman data
-    fetch("/api/ultrahuman")
+    fetch(apiUrl("/api/ultrahuman"))
       .then(res => res.json())
       .then(data => {
         if (data && !data.error) {
@@ -80,281 +78,283 @@ export default function Home() {
         }
       })
       .catch(err => console.error("Failed to fetch Ultrahuman data:", err));
-
-    // Generate suggestion
-    setSuggestion(aiLogic.generateSuggestion());
   }, [user]);
 
-  const handleQuickLog = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quickLog.trim() || !user) return;
+  // Greeting logic
+  const greeting = useMemo(() => {
+    if (!now) return "Hello";
+    const h = now.getHours();
+    if (h < 6) return "Good night";
+    if (h < 12) return "Morning";
+    if (h < 19) return "Afternoon";
+    return "Evening";
+  }, [now]);
 
-    // Pass the input to the assistant page via query param or just navigate
-    // For simplicity, we'll just navigate to assistant with the input pre-filled 
-    // (requires modifying assistant page to read query param, or we just process it here)
+  // Dynamic values
+  const formattedDate = useMemo(() => {
+    if (!now) return "";
+    return `${DAYS[now.getDay()]} · ${MONTHS[now.getMonth()]} ${now.getDate()} · ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  }, [now]);
 
-    // Let's process it here for "magic" feel, then redirect to relevant page
-    const response = aiLogic.processInput(quickLog);
+  const userName = useMemo(() => {
+    if (user?.displayName) return user.displayName.split(" ")[0];
+    if (user?.email) return user.email.split("@")[0];
+    return "Athlete";
+  }, [user]);
 
-    if (response.action === "LOG_MEAL" && response.data) {
-      await storage.saveMeal(user.uid, response.data);
-      router.push("/nutrition");
-    } else if (response.action === "LOG_WORKOUT" && response.data) {
-      await storage.saveWorkout(user.uid, response.data);
-      router.push("/workout");
-    } else {
-      // If unsure, go to assistant
-      router.push("/assistant");
+  const userInitials = useMemo(() => {
+    if (user?.displayName) {
+      const parts = user.displayName.split(" ");
+      return parts.map(p => p[0]).join("").toUpperCase().slice(0, 2);
     }
-  };
+    if (user?.email) return user.email.slice(0, 2).toUpperCase();
+    return "AT";
+  }, [user]);
 
-  const handleAcceptWorkout = async () => {
-    if (!user || !workoutOfDay) return;
-    
-    try {
-      await storage.acceptWorkoutOfDay(user.uid, workoutOfDay.id);
-      const updatedWOD = await storage.getWorkoutOfDay(user.uid);
-      setWorkoutOfDay(updatedWOD);
-    } catch (error) {
-      console.error("Error accepting workout:", error);
-    }
-  };
+  // Macro Target computations
+  const calorieTarget = userProfile?.maxDailyCalories || 2400;
+  const proteinTarget = Math.round((calorieTarget * 0.3) / 4);
+  const carbsTarget = Math.round((calorieTarget * 0.45) / 4);
+  const fatTarget = Math.round((calorieTarget * 0.25) / 9);
 
-  const handleCompleteWorkout = async () => {
-    if (!user || !workoutOfDay) return;
-    
-    try {
-      // Save the workout as completed
-      const completedWorkout = {
-        ...workoutOfDay.workout,
-        date: new Date().toISOString(),
-      };
-      await storage.saveWorkout(user.uid, completedWorkout);
-      
-      // Mark workout of day as completed
-      await storage.completeWorkoutOfDay(user.uid, workoutOfDay.id);
-      
-      // Reload data
-      const todayDate = new Date().toISOString().split('T')[0];
-      const updatedWOD = await storage.getWorkoutOfDay(user.uid, todayDate);
-      setWorkoutOfDay(updatedWOD);
-      
-      // Reload stats
-      const workouts = await storage.getWorkouts(user.uid);
-      setStats(prev => ({ ...prev, workouts: workouts.length }));
-      
-      router.push("/workout");
-    } catch (error) {
-      console.error("Error completing workout:", error);
-    }
-  };
+  // Today's Intake summaries
+  const today = new Date().toISOString().split("T")[0];
+  const todayMeals = useMemo(() => meals.filter(m => m.date.startsWith(today)), [meals, today]);
+  
+  const consumedCalories = todayMeals.reduce((acc, m) => acc + (m.calories || 0), 0);
+  const consumedProtein = todayMeals.reduce((acc, m) => acc + (m.protein || 0), 0);
+  const consumedCarbs = todayMeals.reduce((acc, m) => acc + (m.carbs || 0), 0);
+  const consumedFat = todayMeals.reduce((acc, m) => acc + (m.fats || 0), 0);
+
+  // Readiness ring logic
+  const readinessScore = ultrahumanData?.recovery?.score || ultrahumanData?.sleep?.score || 84;
+  
+  // Whoop / Ultrahuman Data display mapping
+  const hrvVal = ultrahumanData?.recovery?.hrv || 62;
+  const rhrVal = ultrahumanData?.recovery?.restingHr || 54;
+  const sleepVal = ultrahumanData?.sleep?.duration || 7.4;
+  // Compute Strain based on active minutes
+  const strainVal = ultrahumanData?.activity?.activeMinutes 
+    ? (ultrahumanData.activity.activeMinutes / 10).toFixed(1) 
+    : "11.2";
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#0d0d0d] text-neutral-400">
+        <div className="font-mono-jetbrains text-sm">LOADING CONSOLE...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-4 space-y-6 pb-24">
-      <header className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Hello, {user?.displayName || user?.email?.split('@')[0] || 'User'}</h1>
-          <p className="text-muted-foreground">Ready to crush it today?</p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="min-h-screen bg-[#0d0d0d] text-white bg-glow-lime pb-32">
+      <div className="max-w-md mx-auto px-6 pt-16">
+        
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-500 uppercase">
+              {formattedDate}
+            </div>
+            <h1 className="text-2xl font-medium tracking-tight mt-1">
+              {greeting}, {userName}.
+            </h1>
+          </div>
           <Link href="/profile">
-            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary/20 transition-colors cursor-pointer">
-              <User className="h-6 w-6 text-primary" />
+            <div className="w-10 h-10 rounded-full border border-white/14 flex items-center justify-center font-mono-jetbrains text-xs text-white font-medium hover:bg-white/5 active:scale-95 transition-all cursor-pointer">
+              {userInitials}
             </div>
           </Link>
         </div>
-      </header>
 
-      {/* Workout of the Day Card */}
-      {!isLoadingWOD && workoutOfDay && (
-        <Card className="bg-gradient-to-br from-orange-500 to-red-600 text-white border-none shadow-lg">
-          <CardHeader className="pb-3 flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Dumbbell className="h-5 w-5 text-yellow-300" />
-              <CardTitle className="text-base font-semibold">Workout of the Day</CardTitle>
+        {/* Readiness Section */}
+        <div className="mb-9">
+          <div className="flex justify-between items-baseline mb-4">
+            <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-500 uppercase">Readiness</div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[oklch(0.90_0.22_128)] shadow-[0_0_8px_oklch(0.90_0.22_128)] animate-pulse-live" />
+              <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-white uppercase">Live · Ring</div>
             </div>
-            {workoutOfDay.status === "completed" && (
-              <CheckCircle2 className="h-5 w-5 text-green-300" />
-            )}
-          </CardHeader>
-          <CardContent className="space-y-3">
+          </div>
+
+          <div className="flex items-end justify-between gap-4">
             <div>
-              <h3 className="font-bold text-lg mb-2">{workoutOfDay.workout.name}</h3>
-              <div className="space-y-2">
-                {workoutOfDay.workout.exercises.map((exercise, idx) => (
-                  <div key={idx} className="text-sm bg-white/10 rounded p-2">
-                    <div className="font-semibold">{exercise.name}</div>
-                    <div className="text-xs opacity-90">
-                      {exercise.sets.length} sets × {exercise.sets[0]?.reps || 0} reps
-                    </div>
-                  </div>
-                ))}
+              <div className="font-mono-jetbrains text-[108px] font-light leading-[0.9] tracking-[-0.04em]">
+                {readinessScore}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] font-mono-jetbrains text-[9px] font-bold tracking-[0.04em]">
+                  ✦ PRIMED
+                </div>
+                <div className="font-mono-jetbrains text-[10px] text-neutral-500">
+                  +6 vs avg
+                </div>
               </div>
             </div>
-            <div className="flex gap-2 pt-2">
-              {workoutOfDay.status === "suggested" && (
-                <Button
-                  onClick={handleAcceptWorkout}
-                  className="flex-1 bg-white text-orange-600 hover:bg-white/90"
-                  size="sm"
-                >
-                  Accept Workout
-                </Button>
-              )}
-              {workoutOfDay.status === "accepted" && (
-                <Button
-                  onClick={handleCompleteWorkout}
-                  className="flex-1 bg-green-500 hover:bg-green-600"
-                  size="sm"
-                >
-                  Mark as Completed
-                </Button>
-              )}
-              {workoutOfDay.status === "completed" && (
-                <div className="flex-1 text-center text-sm opacity-90">
-                  ✓ Completed today
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* AI Suggestion Card */}
-      <Card className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white border-none shadow-lg">
-        <CardHeader className="pb-2 flex flex-row items-center gap-2">
-          <Sparkles className="h-5 w-5 text-yellow-300" />
-          <CardTitle className="text-base font-semibold">Daily Suggestion</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-sm font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: suggestion.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
-        </CardContent>
-      </Card>
-
-      {/* Quick Log Input */}
-      <form onSubmit={handleQuickLog} className="relative">
-        <Input
-          placeholder="Quick log: 'I ate a banana' or 'I did 50 squats'"
-          className="pr-10 h-12 shadow-sm"
-          value={quickLog}
-          onChange={(e) => setQuickLog(e.target.value)}
-        />
-        <Button
-          type="submit"
-          size="icon"
-          variant="ghost"
-          className="absolute right-1 top-1 h-10 w-10 text-muted-foreground hover:text-primary"
-        >
-          <Send className="h-5 w-5" />
-        </Button>
-      </form>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Workouts</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.workouts}</div>
-            <p className="text-xs text-muted-foreground">Total logged</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Calories</CardTitle>
-            <Flame className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.calories}
-              {userProfile?.maxDailyCalories && (
-                <span className="text-sm font-normal text-muted-foreground ml-2">
-                  / {userProfile.maxDailyCalories}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Consumed today
-              {userProfile?.maxDailyCalories && (
-                <span className={`ml-2 ${
-                  stats.calories > userProfile.maxDailyCalories 
-                    ? "text-destructive" 
-                    : stats.calories > userProfile.maxDailyCalories * 0.9 
-                    ? "text-yellow-600" 
-                    : "text-green-600"
-                }`}>
-                  ({Math.round((stats.calories / userProfile.maxDailyCalories) * 100)}%)
-                </span>
-              )}
-            </p>
-            {userProfile?.maxDailyCalories && (
-              <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
-                <div 
-                  className={`h-full transition-all ${
-                    stats.calories > userProfile.maxDailyCalories 
-                      ? "bg-destructive" 
-                      : stats.calories > userProfile.maxDailyCalories * 0.9 
-                      ? "bg-yellow-600" 
-                      : "bg-green-600"
-                  }`}
-                  style={{ width: `${Math.min((stats.calories / userProfile.maxDailyCalories) * 100, 100)}%` }}
+            {/* SVG readiness ring */}
+            <div className="relative w-[88px] h-[88px] flex-shrink-0">
+              <svg width="88" height="88" viewBox="0 0 88 88" className="-rotate-90">
+                <circle cx="44" cy="44" r="38" fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="2" />
+                <circle 
+                  cx="44" 
+                  cy="44" 
+                  r="38" 
+                  fill="none" 
+                  stroke="oklch(0.90 0.22 128)" 
+                  strokeWidth="2"
+                  strokeDasharray={`${(readinessScore / 100) * 238.7} 238.7`} 
+                  strokeLinecap="butt" 
                 />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Ultrahuman Health Metrics */}
-      {ultrahumanData && (
-        <Card className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-none shadow-lg">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold">Health Metrics (Ultrahuman)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-3 text-center">
-              {ultrahumanData.sleep && (
-                <div className="bg-white/20 rounded-lg p-3">
-                  <div className="text-2xl font-bold">{ultrahumanData.sleep.score}</div>
-                  <div className="text-xs opacity-90">Sleep Score</div>
-                  <div className="text-xs opacity-75 mt-1">{ultrahumanData.sleep.duration}h</div>
-                </div>
-              )}
-              {ultrahumanData.recovery && (
-                <div className="bg-white/20 rounded-lg p-3">
-                  <div className="text-2xl font-bold">{ultrahumanData.recovery.score}</div>
-                  <div className="text-xs opacity-90">Recovery</div>
-                  <div className="text-xs opacity-75 mt-1">HRV: {ultrahumanData.recovery.hrv}</div>
-                </div>
-              )}
-              {ultrahumanData.activity && (
-                <div className="bg-white/20 rounded-lg p-3">
-                  <div className="text-2xl font-bold">{Math.round(ultrahumanData.activity.steps / 1000)}k</div>
-                  <div className="text-xs opacity-90">Steps</div>
-                  <div className="text-xs opacity-75 mt-1">{ultrahumanData.activity.activeMinutes}min</div>
-                </div>
-              )}
+              </svg>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
 
-      <section>
-        <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 gap-4">
-          <Link href="/workout">
-            <Button className="w-full" size="lg">
-              Start Workout
-            </Button>
-          </Link>
-          <Link href="/nutrition">
-            <Button variant="outline" className="w-full" size="lg">
-              Log Meal
-            </Button>
-          </Link>
+          {/* 4-column data strip */}
+          <div className="grid grid-cols-4 mt-6 border-y border-white/8">
+            {[
+              { label: "HRV", value: hrvVal, unit: "ms" },
+              { label: "RHR", value: rhrVal, unit: "bpm" },
+              { label: "SLEEP", value: sleepVal, unit: "h" },
+              { label: "STRAIN", value: strainVal, unit: "" },
+            ].map((item, idx) => (
+              <div 
+                key={item.label} 
+                className={cn(
+                  "py-3.5 px-2",
+                  idx < 3 ? "border-r border-white/8" : ""
+                )}
+              >
+                <div className="font-mono-jetbrains text-[9px] tracking-[0.14em] text-neutral-500 uppercase">{item.label}</div>
+                <div className="font-mono-jetbrains text-[16px] font-medium mt-1.5 tracking-tight">
+                  {item.value}
+                  <span className="text-[10px] text-neutral-500 font-normal ml-0.5">{item.unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      </section>
+
+        {/* Today's Workout Section */}
+        {workoutOfDay ? (
+          <div className="mb-9">
+            <div className="flex justify-between items-baseline mb-3">
+              <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-500 uppercase">Programmed today</div>
+              <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-400 uppercase">Today's Selection</div>
+            </div>
+
+            <div className="bg-neutral-900 border border-white/8 p-5 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-1 h-full bg-[oklch(0.90_0.22_128)]" />
+
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <div className="font-mono-jetbrains text-[9px] text-[oklch(0.90_0.22_128)] tracking-[0.16em] font-semibold uppercase mb-1">
+                    {workoutOfDay.workout.exercises.length > 3 ? "FULL BODY" : "SPLIT"} · DAY
+                  </div>
+                  <h3 className="text-xl font-medium tracking-tight leading-tight">
+                    {workoutOfDay.workout.name}
+                  </h3>
+                </div>
+                <div className="text-right">
+                  <div className="font-mono-jetbrains text-[20px] tracking-tight">60′</div>
+                  <div className="font-mono-jetbrains text-[9px] text-neutral-500 uppercase mt-0.5">est.</div>
+                </div>
+              </div>
+
+              {/* Exercise lists */}
+              <div className="border-t border-white/8 pt-3 space-y-1">
+                {workoutOfDay.workout.exercises.map((exercise, idx) => {
+                  const setSample = exercise.sets[0];
+                  return (
+                    <div 
+                      key={exercise.id} 
+                      className="grid grid-cols-[24px_1fr_auto_auto] items-center gap-3 py-2 border-b border-white/8 last:border-0"
+                    >
+                      <div className="font-mono-jetbrains text-[10px] text-neutral-500">
+                        {String(idx + 1).padStart(2, "0")}
+                      </div>
+                      <div className="text-sm truncate pr-2">{exercise.name}</div>
+                      <div className="font-mono-jetbrains text-[10.5px] text-neutral-400">
+                        {exercise.sets.length} × {setSample?.reps || 10}
+                      </div>
+                      <div className="font-mono-jetbrains text-[10.5px] text-[oklch(0.90_0.22_128)] min-w-[40px] text-right font-medium">
+                        {setSample?.weight > 0 ? `${setSample.weight}kg` : "BW"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Start Session CTA */}
+              <button 
+                onClick={() => router.push(`/workout/session?wodId=${workoutOfDay.id}`)}
+                className="w-full mt-4 py-3 bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] border-0 font-mono-jetbrains text-[11px] font-bold tracking-[0.14em] uppercase flex items-center justify-center gap-1.5 hover:opacity-95 active:scale-[0.98] transition-all cursor-pointer"
+              >
+                Start session <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-9">
+            <div className="flex justify-between items-baseline mb-3">
+              <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-500 uppercase">Programmed today</div>
+            </div>
+            <div className="border border-dashed border-white/14 p-8 text-center text-neutral-400">
+              <Dumbbell className="h-8 w-8 mx-auto mb-3 opacity-30 text-[oklch(0.90_0.22_128)]" />
+              <p className="text-sm">No workout suggested for today yet.</p>
+              <button 
+                onClick={() => router.push("/workout")} 
+                className="mt-3 font-mono-jetbrains text-[10px] tracking-wider text-[oklch(0.90_0.22_128)] uppercase font-semibold hover:underline cursor-pointer"
+              >
+                Log a workout manually +
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Intake progress bar & macros */}
+        <div>
+          <div className="flex justify-between items-baseline mb-3">
+            <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-500 uppercase">Intake</div>
+            <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-neutral-300 uppercase">
+              {consumedCalories.toLocaleString()} / {calorieTarget.toLocaleString()} kcal
+            </div>
+          </div>
+
+          {/* intake progress bar */}
+          <div className="flex gap-1 h-1.5 bg-neutral-900 border border-white/8 mb-4 overflow-hidden">
+            <div 
+              style={{ width: `${Math.min((consumedProtein / proteinTarget) * 33, 33)}%` }} 
+              className="bg-[oklch(0.90_0.22_128)] h-full" 
+            />
+            <div 
+              style={{ width: `${Math.min((consumedCarbs / carbsTarget) * 33, 33)}%` }} 
+              className="bg-[oklch(0.78_0.16_60)] h-full" 
+            />
+            <div 
+              style={{ width: `${Math.min((consumedFat / fatTarget) * 33, 33)}%` }} 
+              className="bg-purple-500 h-full" 
+            />
+          </div>
+
+          {/* Macros 3-col values */}
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { label: "Protein", val: consumedProtein, target: proteinTarget, color: "text-[oklch(0.90_0.22_128)]" },
+              { label: "Carbs", val: consumedCarbs, target: carbsTarget, color: "text-[oklch(0.78_0.16_60)]" },
+              { label: "Fat", val: consumedFat, target: fatTarget, color: "text-purple-400" },
+            ].map((m) => (
+              <div key={m.label}>
+                <div className="font-mono-jetbrains text-[9px] tracking-[0.14em] text-neutral-500 uppercase">{m.label}</div>
+                <div className="font-mono-jetbrains text-[15px] mt-1">
+                  {m.val}g
+                  <span className="text-[10px] text-neutral-500 font-normal"> / {m.target}g</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }

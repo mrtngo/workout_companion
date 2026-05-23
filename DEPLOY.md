@@ -4,55 +4,33 @@
 
 Your app is configured for Firebase deployment with project ID: `trackapp-c7e3a`
 
-### Quick Deploy (Static Pages Only - API routes won't work)
+### One-time secret setup
 
-1. Build the app:
-   ```bash
-   npm run build
-   ```
+Gemini and Ultrahuman credentials are read by Firebase Functions, not by the
+browser or iOS bundle:
 
-2. Deploy to Firebase:
-   ```bash
-   firebase deploy --only hosting
-   ```
+```bash
+firebase functions:secrets:set GEMINI_API_KEY
+firebase functions:secrets:set ULTRAHUMAN_TOKEN
+firebase functions:secrets:set ULTRAHUMAN_ACCESS_CODE
+```
 
-### Full Deployment with API Routes
+### Deploy
 
-For Next.js App Router with API routes, consider:
+```bash
+npm install
+npm --prefix functions install
+npm run build
+npm run functions:build
+firebase deploy --only functions,hosting
+```
 
-1. **Vercel** (Recommended - Easiest for Next.js):
-   - Push to GitHub
-   - Go to https://vercel.com
-   - Import repository
-   - Auto-deploys with full Next.js support
+Firebase Hosting serves the static Next export from `out/`. Requests to
+`/api/chat` and `/api/ultrahuman` are rewritten to Cloud Functions.
 
-2. **Firebase Functions** (More complex):
-   - Requires setting up Firebase Functions
-   - API routes need to be converted to Cloud Functions
-   - More setup required
+### Build iOS
 
-### Current Status
-
-✅ Firebase configuration files created:
-- `.firebaserc` - Project configuration
-- `firebase.json` - Hosting configuration
-
-✅ Build is working
-✅ All code committed to git
-
-### Next Steps
-
-1. Verify Firebase project access:
-   ```bash
-   firebase projects:list
-   ```
-
-2. If project doesn't appear, you may need to:
-   - Create it in Firebase Console: https://console.firebase.google.com
-   - Or use a different project ID
-
-3. Deploy:
-   ```bash
-   firebase deploy
-   ```
-
+```bash
+NEXT_PUBLIC_API_BASE_URL=https://trackapp-c7e3a.web.app npm run ios:sync
+npm run ios:open
+```

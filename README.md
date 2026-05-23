@@ -27,13 +27,6 @@ npm install
 Create a `.env.local` file in the root directory (see `.env.example` for reference):
 
 ```env
-# Google Gemini API Key
-GOOGLE_API_KEY=your_gemini_api_key_here
-
-# Ultrahuman API (optional)
-ULTRAHUMAN_TOKEN=your_ultrahuman_token_here
-ULTRAHUMAN_ACCESS_CODE=your_ultrahuman_access_code_here
-
 # Firebase Configuration (REQUIRED)
 NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
@@ -41,9 +34,15 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project_id.appspot.com
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
 NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+
+# Required when building the bundled iOS app.
+# Use your Firebase Hosting URL so the app can call /api/chat and /api/ultrahuman.
+NEXT_PUBLIC_API_BASE_URL=https://your-project.web.app
 ```
 
 **Note:** All Firebase environment variables must start with `NEXT_PUBLIC_` to be accessible in the browser.
+Gemini and Ultrahuman secrets are stored as Firebase Functions secrets instead
+of browser environment variables.
 
 ### 4. Run the Development Server
 
@@ -52,6 +51,52 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) to see your app! 🎉
+
+## 📱 iOS App
+
+This project includes a Capacitor iOS shell. The Next app is exported as static
+files and bundled into the native iOS project, while `/api/chat` and
+`/api/ultrahuman` run as Firebase HTTPS functions so secrets stay off-device.
+
+### One-time setup
+
+```bash
+npm install
+firebase functions:secrets:set GEMINI_API_KEY
+firebase functions:secrets:set ULTRAHUMAN_TOKEN
+firebase functions:secrets:set ULTRAHUMAN_ACCESS_CODE
+npm run ios:sync
+```
+
+### Build the bundled iOS app
+
+Build with your Firebase Hosting URL as the API base. The URL is public and is
+baked into the static client bundle; the actual Gemini and Ultrahuman secrets
+remain in Firebase Functions.
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=https://your-project.web.app npm run ios:sync
+npm run ios:open
+```
+
+From Xcode, select a simulator or physical device and press Run.
+
+### Deploy the backend and web app
+
+```bash
+npm run build
+firebase deploy --only functions,hosting
+```
+
+### Useful commands
+
+```bash
+npm run build            # export static Next files to out/
+npm run functions:build  # type-check and compile Firebase Functions
+npm run ios:sync         # build static files and copy them into iOS
+npm run ios:open         # open the Xcode workspace
+npm run ios:run          # sync, then run from the Capacitor CLI
+```
 
 ## ✨ Features
 

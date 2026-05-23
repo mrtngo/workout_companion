@@ -5,10 +5,18 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "build:ios": "next build",
+    "start": "firebase emulators:start --only hosting,functions",
+    "lint": "eslint",
+    "functions:build": "npm --prefix functions run build",
+    "ios:sync": "npm run build:ios && cap sync ios",
+    "ios:open": "cap open ios",
+    "ios:run": "npm run ios:sync && cap run ios"
   },
   "dependencies": {
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/ios": "^8.3.4",
     "@dicebear/avataaars": "^9.2.4",
     "@dicebear/collection": "^9.2.4",
     "@dicebear/core": "^9.2.4",

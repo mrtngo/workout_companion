@@ -3,7 +3,7 @@
     "rules": "firestore.rules"
   },
   "hosting": {
-    "public": ".next",
+    "public": "out",
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -11,13 +11,30 @@
     ],
     "rewrites": [
       {
+        "source": "/api/chat",
+        "function": {
+          "functionId": "chat",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/api/ultrahuman",
+        "function": {
+          "functionId": "ultrahuman",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
     ]
   },
   "functions": {
-    "source": ".",
-    "runtime": "nodejs20"
+    "source": "functions",
+    "runtime": "nodejs20",
+    "predeploy": [
+      "npm --prefix \"$RESOURCE_DIR\" run build"
+    ]
   }
 }

@@ -1,14 +1,28 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Bot, User, Plus, MessageSquare, ChevronLeft, ChevronRight, Camera, X } from "lucide-react";
-import { aiLogic, AIResponse } from "@/lib/ai-logic";
+import { 
+  Send, 
+  Bot, 
+  User, 
+  Plus, 
+  MessageSquare, 
+  ChevronLeft, 
+  ChevronRight, 
+  Camera, 
+  X,
+  Sparkles,
+  Zap,
+  ArrowRight
+} from "lucide-react";
+import { aiLogic } from "@/lib/ai-logic";
 import { storage, Conversation, ConversationMessage } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
+import { apiUrl } from "@/lib/api";
 
 interface Message {
     id: string;
@@ -16,19 +30,27 @@ interface Message {
     content: string;
     videoUrl?: string;
     imageUrl?: string;
+    timestamp?: string;
 }
 
 export default function AssistantPage() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
     const { user } = useAuth();
+    
+    const messageParam = searchParams.get("message");
+
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingConversations, setIsLoadingConversations] = useState(true);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-    const scrollAreaRef = useRef<HTMLDivElement>(null);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Collapsed by default on mobile console
+    
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
+    
     const [pendingImage, setPendingImage] = useState<{
         base64: string; mimeType: string; previewUrl: string;
     } | null>(null);
@@ -45,11 +67,9 @@ export default function AssistantPage() {
                 const convos = await storage.getConversations(user.uid);
                 setConversations(convos);
                 
-                // If there are conversations, load the first one
                 if (convos.length > 0 && !currentConversationId) {
                     setCurrentConversationId(convos[0].id);
                 } else if (convos.length === 0) {
-                    // Create first conversation if none exist
                     const newConvId = await storage.createConversation(user.uid);
                     const updatedConvos = await storage.getConversations(user.uid);
                     setConversations(updatedConvos);
@@ -71,15 +91,14 @@ export default function AssistantPage() {
 
         const loadMessages = async () => {
             try {
-                console.log("Loading messages for conversation:", currentConversationId);
                 const loadedMessages = await storage.getConversationMessages(user.uid, currentConversationId);
-                console.log("Loaded messages:", loadedMessages.length, loadedMessages);
                 setMessages(loadedMessages.map(msg => ({
                     id: msg.id,
                     role: msg.role,
                     content: msg.content,
                     videoUrl: msg.videoUrl,
                     imageUrl: msg.imageUrl,
+                    timestamp: msg.timestamp
                 })));
             } catch (error) {
                 console.error("Error loading messages:", error);
@@ -89,14 +108,19 @@ export default function AssistantPage() {
         loadMessages();
     }, [user, currentConversationId]);
 
+    // Auto-fill query parameter message on load
     useEffect(() => {
-        if (scrollAreaRef.current) {
-            const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-            if (scrollContainer) {
-                scrollContainer.scrollTop = scrollContainer.scrollHeight;
-            }
+        if (messageParam && currentConversationId) {
+            setInput(messageParam);
         }
-    }, [messages]);
+    }, [messageParam, currentConversationId]);
+
+    // Auto-scroll to bottom of chat
+    useEffect(() => {
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
+    }, [messages, isLoading]);
 
     const handleCreateConversation = async () => {
         if (!user) return;
@@ -106,6 +130,7 @@ export default function AssistantPage() {
             const updatedConvos = await storage.getConversations(user.uid);
             setConversations(updatedConvos);
             setCurrentConversationId(newConvId);
+            setIsSidebarOpen(false); // auto-close on selection
         } catch (error) {
             console.error("Error creating conversation:", error);
         }
@@ -113,13 +138,11 @@ export default function AssistantPage() {
 
     const handleSelectConversation = (conversationId: string) => {
         setCurrentConversationId(conversationId);
+        setIsSidebarOpen(false);
     };
 
     const saveMessageToFirestore = async (message: Message) => {
-        if (!user || !currentConversationId) {
-            console.warn("Cannot save message: missing user or conversationId", { user: !!user, conversationId: currentConversationId });
-            return;
-        }
+        if (!user || !currentConversationId) return;
 
         try {
             await storage.saveMessage(user.uid, currentConversationId, {
@@ -128,12 +151,10 @@ export default function AssistantPage() {
                 content: message.content,
                 videoUrl: message.videoUrl,
                 imageUrl: message.imageUrl,
-                timestamp: new Date().toISOString(),
+                timestamp: message.timestamp || new Date().toISOString(),
             });
-            console.log("Message saved successfully:", message.id);
         } catch (error) {
             console.error("Error saving message:", error);
-            // Don't throw - we want the UI to continue even if save fails
         }
     };
 
@@ -167,7 +188,6 @@ export default function AssistantPage() {
             img.src = ev.target?.result as string;
         };
         reader.readAsDataURL(file);
-        // Reset input so same file can be selected again
         e.target.value = "";
     };
 
@@ -181,6 +201,7 @@ export default function AssistantPage() {
             role: "user",
             content: input,
             imageUrl: capturedImage?.previewUrl,
+            timestamp: new Date().toISOString()
         };
 
         setMessages((prev) => [...prev, userMessage]);
@@ -190,7 +211,6 @@ export default function AssistantPage() {
         setIsLoading(true);
 
         let videoUrl: string | undefined = undefined;
-        // Handle Video Fallback (legacy logic) - applies to both real and mock AI
         const lowerInput = userMessage.content.toLowerCase();
         if (lowerInput.includes("bench press") && lowerInput.includes("how to")) {
             videoUrl = "https://www.youtube.com/embed/rT7DgCr-3pg";
@@ -201,27 +221,17 @@ export default function AssistantPage() {
         }
 
         try {
-            // Load context in parallel (non-blocking) - start API call immediately
-            const contextPromise = user ? Promise.all([
+            const [recentWorkouts, recentMeals] = await Promise.all([
                 storage.getWorkouts(user.uid).catch(() => []),
                 storage.getMeals(user.uid).catch(() => [])
-            ]) : Promise.resolve([[], []]);
-            
-            // Start API call immediately with minimal context, or wait max 1s for context
-            const contextTimeout = Promise.race([
-                contextPromise,
-                new Promise(resolve => setTimeout(() => resolve([[], []]), 1000))
-            ]) as Promise<[any[], any[]]>;
-            
-            const [recentWorkouts, recentMeals] = await contextTimeout;
-            
-            // Try to call real Gemini API with timeout
+            ]);
+
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
             
             let response: Response;
             try {
-                response = await fetch("/api/chat", {
+                response = await fetch(apiUrl("/api/chat"), {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -237,56 +247,28 @@ export default function AssistantPage() {
                 clearTimeout(timeoutId);
             } catch (fetchError: any) {
                 clearTimeout(timeoutId);
-                // If request was aborted or failed, fall back to mock AI
-                if (fetchError.name === 'AbortError' || fetchError.message?.includes('aborted')) {
-                    console.log("Request timeout, using mock AI");
-                    throw new Error("timeout"); // Will be caught by outer catch
-                }
                 throw fetchError;
             }
 
-            // Check if response is ok before parsing
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-                console.error("API error:", response.status, errorData);
-                throw new Error(errorData.error || `API error: ${response.status}`);
+                throw new Error(`API error: ${response.status}`);
             }
 
             const data = await response.json();
 
-            // If API returns error, fall back to mock AI
             if (data.text?.includes("trouble processing")) {
-                console.log("Gemini API unavailable, using mock AI");
-                const mockResponse = aiLogic.processInput(userMessage.content);
-
-                // Handle Actions from mock
-                if (mockResponse.action === "LOG_MEAL" && mockResponse.data && user) {
-                    await storage.saveMeal(user.uid, mockResponse.data);
-                } else if (mockResponse.action === "LOG_WORKOUT" && mockResponse.data && user) {
-                    await storage.saveWorkout(user.uid, mockResponse.data);
-                }
-
-                const aiMessage: Message = {
-                    id: (Date.now() + 1).toString(),
-                    role: "assistant",
-                    content: mockResponse.text + " _(using mock AI)_",
-                    videoUrl,
-                };
-                setMessages((prev) => [...prev, aiMessage]);
-                await saveMessageToFirestore(aiMessage);
-                setIsLoading(false);
-                return;
+                throw new Error("API error processing text");
             }
 
-            // Handle Actions from real API
-            if (data.action === "LOG_MEAL" && data.data && user) {
+            // Save triggers returned from Gemini API
+            if (data.action === "LOG_MEAL" && data.data) {
                 const mealDate = data.data.date || new Date().toISOString();
                 await storage.saveMeal(user.uid, {
                     id: "",
                     date: mealDate,
                     ...data.data,
                 });
-            } else if (data.action === "LOG_WORKOUT" && data.data && user) {
+            } else if (data.action === "LOG_WORKOUT" && data.data) {
                 const workoutDate = data.data.date || new Date().toISOString();
                 await storage.saveWorkout(user.uid, {
                     id: "",
@@ -300,30 +282,29 @@ export default function AssistantPage() {
                 role: "assistant",
                 content: data.text || "I processed your request.",
                 videoUrl,
+                timestamp: new Date().toISOString()
             };
 
             setMessages((prev) => [...prev, aiMessage]);
             await saveMessageToFirestore(aiMessage);
         } catch (error: any) {
-            // Don't log abort errors as errors - they're expected timeouts
-            if (error?.name !== 'AbortError' && error?.message !== 'timeout') {
-                console.error("Error calling AI, using mock fallback:", error);
-            }
+            console.warn("API error or timeout, falling back to mock AI:", error);
 
-            // Fall back to mock AI logic
+            // Mock AI processing fallback
             const mockResponse = aiLogic.processInput(userMessage.content);
 
-            if (mockResponse.action === "LOG_MEAL" && mockResponse.data && user) {
+            if (mockResponse.action === "LOG_MEAL" && mockResponse.data) {
                 await storage.saveMeal(user.uid, mockResponse.data);
-            } else if (mockResponse.action === "LOG_WORKOUT" && mockResponse.data && user) {
+            } else if (mockResponse.action === "LOG_WORKOUT" && mockResponse.data) {
                 await storage.saveWorkout(user.uid, mockResponse.data);
             }
 
             const errorMessage: Message = {
                 id: (Date.now() + 1).toString(),
                 role: "assistant",
-                content: mockResponse.text + " _(using local AI)_",
+                content: mockResponse.text,
                 videoUrl,
+                timestamp: new Date().toISOString()
             };
             setMessages((prev) => [...prev, errorMessage]);
             await saveMessageToFirestore(errorMessage);
@@ -332,187 +313,240 @@ export default function AssistantPage() {
         }
     };
 
-    if (isLoadingConversations) {
-        return (
-            <div className="flex items-center justify-center h-[calc(100vh-5rem)]">
-                <div className="text-muted-foreground">Loading conversations...</div>
-            </div>
-        );
-    }
+    // Format timestamps inside bubbles
+    const formatBubbleTime = (isoString?: string) => {
+        if (!isoString) return "";
+        try {
+            const d = new Date(isoString);
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        } catch (e) {
+            return "";
+        }
+    };
 
     return (
-        <div className="flex h-[calc(100vh-5rem)] relative">
-            {/* Sidebar */}
-            <div className={cn(
-                "border-r bg-background flex flex-col transition-all duration-300 ease-in-out",
-                isSidebarOpen ? "w-64" : "w-0 overflow-hidden"
-            )}>
-                <div className="p-4 border-b">
-                    <Button
-                        onClick={handleCreateConversation}
-                        className="w-full"
-                        size="sm"
-                    >
-                        <Plus className="h-4 w-4 mr-2" />
-                        New Conversation
-                    </Button>
+        <div className="min-h-screen bg-[#0d0d0d] text-white bg-glow-lime flex flex-col relative overflow-hidden">
+            
+            {/* Header */}
+            <header className="pt-16 pb-4 px-6 border-b border-white/8 bg-[#0d0d0d]/90 backdrop-blur-md sticky top-0 z-20 flex justify-between items-end max-w-md mx-auto w-full">
+                <div>
+                    <div className="text-[10px] uppercase font-mono-jetbrains tracking-[0.16em] text-neutral-500 mb-1">
+                        Coach
+                    </div>
+                    <h1 className="text-2xl font-medium tracking-tight">Conversation</h1>
                 </div>
-                <ScrollArea className="flex-1">
-                    <div className="p-2 space-y-1">
-                        {conversations.map((conversation) => (
-                            <button
-                                key={conversation.id}
-                                onClick={() => handleSelectConversation(conversation.id)}
-                                className={cn(
-                                    "w-full text-left p-3 rounded-lg transition-colors hover:bg-accent",
-                                    currentConversationId === conversation.id && "bg-accent"
-                                )}
-                            >
-                                <div className="flex items-center gap-2 mb-1">
-                                    <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-sm font-medium truncate">
-                                            {conversation.title}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">
-                                            {new Date(conversation.updatedAt).toLocaleDateString()}
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-[oklch(0.90_0.22_128)] rounded-full animate-pulse-live" />
+                        <span className="font-mono-jetbrains text-[8px] text-neutral-400 tracking-wider uppercase">
+                            Context Loaded
+                        </span>
+                    </div>
+                    <button 
+                        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                        className="px-2.5 py-1 border border-white/14 hover:border-white/30 bg-neutral-950/20 text-neutral-400 hover:text-white font-mono-jetbrains text-[9px] tracking-wider uppercase cursor-pointer rounded-none"
+                    >
+                        {isSidebarOpen ? "Chat" : "History"}
+                    </button>
+                </div>
+            </header>
+
+            {/* Main Area */}
+            <div className="flex-1 flex relative max-w-md mx-auto w-full overflow-hidden">
+                
+                {/* Conversation History Drawer */}
+                <div className={cn(
+                    "absolute inset-y-0 left-0 z-10 w-full bg-[#0d0d0d]/95 border-r border-white/8 flex flex-col transition-transform duration-300 ease-in-out",
+                    isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+                )}>
+                    <div className="p-4 border-b border-white/8 flex justify-between items-center bg-neutral-950/40">
+                        <div className="font-mono-jetbrains text-[10px] tracking-[0.16em] uppercase text-neutral-400">
+                            Saved Sessions
+                        </div>
+                        <button
+                            onClick={handleCreateConversation}
+                            className="px-2.5 py-1 border border-[oklch(0.90_0.22_128)] text-[oklch(0.90_0.22_128)] font-mono-jetbrains text-[9px] tracking-wider uppercase cursor-pointer rounded-none flex items-center gap-1 hover:bg-[oklch(0.90_0.22_128)]/5"
+                        >
+                            <Plus className="h-3 w-3" /> New
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                        {isLoadingConversations ? (
+                            <div className="text-center py-6 font-mono-jetbrains text-xs text-neutral-600">LOADING LOGS...</div>
+                        ) : conversations.length === 0 ? (
+                            <div className="text-center py-6 font-mono-jetbrains text-xs text-neutral-600">NO CONVERSATIONS</div>
+                        ) : (
+                            conversations.map((c) => (
+                                <button
+                                    key={c.id}
+                                    onClick={() => handleSelectConversation(c.id)}
+                                    className={cn(
+                                        "w-full text-left p-3.5 border rounded-none transition-colors flex items-center justify-between",
+                                        currentConversationId === c.id 
+                                        ? "border-[oklch(0.90_0.22_128)] bg-[oklch(0.90_0.22_128)]/5" 
+                                        : "border-white/8 bg-neutral-950/20 hover:bg-neutral-900/30"
+                                    )}
+                                >
+                                    <div className="min-w-0 flex-1 pr-3">
+                                        <div className="text-xs font-medium text-white truncate">{c.title}</div>
+                                        <div className="font-mono-jetbrains text-[8px] text-neutral-500 mt-1 uppercase">
+                                            {new Date(c.updatedAt).toLocaleDateString()}
                                         </div>
                                     </div>
-                                </div>
-                            </button>
-                        ))}
+                                    <MessageSquare className={cn(
+                                        "h-3.5 w-3.5 flex-shrink-0",
+                                        currentConversationId === c.id ? "text-[oklch(0.90_0.22_128)]" : "text-neutral-600"
+                                    )} />
+                                </button>
+                            ))
+                        )}
                     </div>
-                </ScrollArea>
-            </div>
+                </div>
 
-            {/* Sidebar Toggle Button */}
-            <Button
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                variant="outline"
-                size="icon"
-                className={cn(
-                    "absolute top-4 z-10 transition-all duration-300",
-                    isSidebarOpen ? "left-[256px]" : "left-0",
-                    "border border-border bg-background shadow-sm"
-                )}
-            >
-                {isSidebarOpen ? (
-                    <ChevronLeft className="h-4 w-4" />
-                ) : (
-                    <ChevronRight className="h-4 w-4" />
-                )}
-            </Button>
-
-            {/* Main Chat Area */}
-            <div className="flex-1 flex flex-col relative">
-                <header className="p-4 border-b">
-                    <h1 className="text-2xl font-bold flex items-center gap-2">
-                        <Bot className="h-6 w-6 text-primary" />
-                        AI Assistant
-                    </h1>
-                </header>
-
-                <ScrollArea className="flex-1 p-4 pb-20" ref={scrollAreaRef}>
-                    <div className="space-y-4 pb-4">
-                        {messages.map((message) => (
-                            <div
-                                key={message.id}
-                                className={`flex gap-3 ${message.role === "user" ? "flex-row-reverse" : "flex-row"
-                                    }`}
-                            >
-                                <div
-                                    className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${message.role === "user"
-                                        ? "bg-primary text-primary-foreground"
-                                        : "bg-muted"
-                                        }`}
-                                >
-                                    {message.role === "user" ? (
-                                        <User className="h-5 w-5" />
-                                    ) : (
-                                        <Bot className="h-5 w-5" />
-                                    )}
+                {/* Messages Container */}
+                <div 
+                    ref={scrollContainerRef}
+                    className="flex-1 overflow-y-auto px-6 pt-4 pb-36 space-y-6 scrollbar-hide"
+                >
+                    {messages.map((message) => {
+                        const isUser = message.role === "user";
+                        const showSwapCard = !isUser && message.content.toLowerCase().includes("swap");
+                        return (
+                            <div key={message.id} className="space-y-2.5">
+                                
+                                {/* Message Sender header info */}
+                                <div className={cn(
+                                    "flex items-center gap-2",
+                                    isUser ? "justify-end" : "justify-start"
+                                )}>
+                                    <span className={cn(
+                                        "font-mono-jetbrains text-[9px] tracking-wider uppercase font-bold",
+                                        isUser ? "text-neutral-400" : "text-[oklch(0.90_0.22_128)]"
+                                    )}>
+                                        {isUser ? "You" : "Coach"}
+                                    </span>
+                                    <span className="font-mono-jetbrains text-[8px] text-neutral-600">
+                                        {formatBubbleTime(message.timestamp)}
+                                    </span>
                                 </div>
-                                <div
-                                    className={`rounded-lg p-3 max-w-[80%] ${message.role === "user"
-                                        ? "bg-primary text-primary-foreground"
-                                        : "bg-muted"
-                                        }`}
-                                >
+
+                                {/* Content block */}
+                                <div className={cn(
+                                    "text-sm leading-relaxed max-w-[90%]",
+                                    isUser 
+                                    ? "ml-auto text-right text-white" 
+                                    : "mr-auto text-left text-neutral-200 pl-3.5 border-l-2 border-[oklch(0.90_0.22_128)]"
+                                )}>
+                                    {/* Uploaded image inside bubble */}
                                     {message.imageUrl && (
-                                        <img
-                                            src={message.imageUrl}
-                                            alt="Meal photo"
-                                            className="rounded-md mb-2 max-w-full max-h-48 object-cover"
+                                        <div className={cn(
+                                            "mb-2.5 overflow-hidden border border-white/8 max-w-xs",
+                                            isUser ? "ml-auto" : "mr-auto"
+                                        )}>
+                                            <img
+                                                src={message.imageUrl}
+                                                alt="Meal log attachment"
+                                                className="w-full h-auto object-cover max-h-48"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Text content with markdown bold formatting */}
+                                    {message.content && (
+                                        <p 
+                                            dangerouslySetInnerHTML={{ 
+                                                __html: message.content.replace(/\*\*(.*?)\*\*/g, '<strong class="text-[oklch(0.90_0.22_128)] font-semibold">$1</strong>') 
+                                            }} 
                                         />
                                     )}
-                                    {message.content && (
-                                        <div className="text-sm prose dark:prose-invert" dangerouslySetInnerHTML={{ __html: message.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
-                                    )}
+
+                                    {/* Embedded instruction video fallback */}
                                     {message.videoUrl && (
-                                        <div className="mt-3 rounded-md overflow-hidden bg-black aspect-video relative">
+                                        <div className="mt-3.5 aspect-video w-full max-w-sm border border-white/8 overflow-hidden bg-black relative">
                                             <iframe
                                                 width="100%"
                                                 height="100%"
                                                 src={message.videoUrl}
-                                                title="YouTube video player"
+                                                title="Exercise instruction guide"
                                                 frameBorder="0"
                                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                                 allowFullScreen
-                                            ></iframe>
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Swap Card recommendation inside AI response */}
+                                    {showSwapCard && (
+                                        <div className="mt-3.5 p-3.5 border border-white/8 bg-neutral-950/40 relative flex justify-between items-center max-w-xs">
+                                            <div className="absolute top-0 left-0 w-[2px] h-full bg-[oklch(0.90_0.22_128)]" />
+                                            <div>
+                                                <div className="font-mono-jetbrains text-[8px] tracking-[0.14em] text-neutral-500 uppercase leading-none">
+                                                    Proposed Swap
+                                                </div>
+                                                <div className="text-[11px] font-medium text-white mt-1.5 leading-tight">
+                                                    Legs · Heavy → Recovery · Z2 40′
+                                                </div>
+                                            </div>
+                                            <button 
+                                                onClick={() => alert("Proposed swap applied to today's schedule!")}
+                                                className="px-2.5 py-1 bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] border-none font-mono-jetbrains text-[8px] font-bold tracking-wider uppercase cursor-pointer rounded-none"
+                                            >
+                                                Apply
+                                            </button>
                                         </div>
                                     )}
                                 </div>
                             </div>
-                        ))}
-                        {isLoading && (
-                            <div className="flex gap-3">
-                                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
-                                    <Bot className="h-5 w-5" />
-                                </div>
-                                <div className="bg-muted rounded-lg p-3">
-                                    <div className="flex gap-1">
-                                        <span className="w-2 h-2 bg-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></span>
-                                        <span className="w-2 h-2 bg-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></span>
-                                        <span className="w-2 h-2 bg-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></span>
-                                    </div>
+                        );
+                    })}
+
+                    {/* Loader typing dot animation */}
+                    {isLoading && (
+                        <div className="space-y-2.5">
+                            <div className="flex items-center gap-2">
+                                <span className="font-mono-jetbrains text-[9px] tracking-wider uppercase font-bold text-[oklch(0.90_0.22_128)]">
+                                    Coach
+                                </span>
+                                <span className="font-mono-jetbrains text-[8px] text-neutral-600">typing</span>
+                            </div>
+                            <div className="pl-3.5 border-l-2 border-[oklch(0.90_0.22_128)]">
+                                <div className="flex gap-1.5 py-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[oklch(0.90_0.22_128)] opacity-40 animate-pulse-live" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[oklch(0.90_0.22_128)] opacity-40 animate-pulse-live" style={{ animationDelay: "200ms" }} />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[oklch(0.90_0.22_128)] opacity-40 animate-pulse-live" style={{ animationDelay: "400ms" }} />
                                 </div>
                             </div>
-                        )}
-                    </div>
-                </ScrollArea>
-
-                {/* Fixed Input Area - Pinned above bottom nav */}
-                <div
-                    className={cn(
-                        "fixed p-4 border-t bg-background z-10 transition-all duration-300",
-                        "bottom-20 right-0"
+                        </div>
                     )}
-                    style={{
-                        left: isSidebarOpen ? '256px' : '0'
-                    }}
-                >
+                </div>
+
+                {/* Floating pill Input Dock (positioned above home bar nav) */}
+                <div className="absolute left-6 right-6 bottom-24 z-20">
+                    
+                    {/* Image Preview container */}
                     {pendingImage && (
-                        <div className="relative inline-block mb-2">
+                        <div className="relative inline-block mb-3.5 bg-neutral-950 p-1.5 border border-white/8">
                             <img
                                 src={pendingImage.previewUrl}
-                                alt="Pending meal photo"
-                                className="h-16 w-16 rounded-md object-cover"
+                                alt="Pre-log upload preview"
+                                className="h-14 w-14 object-cover"
                             />
                             <button
                                 onClick={() => setPendingImage(null)}
-                                className="absolute -top-1 -right-1 bg-background border rounded-full p-0.5"
+                                className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-0.5 border border-white/14 cursor-pointer"
                                 type="button"
                             >
-                                <X className="h-3 w-3" />
+                                <X className="h-2.5 w-2.5" />
                             </button>
                         </div>
                     )}
+
                     <form
                         onSubmit={(e) => {
                             e.preventDefault();
                             handleSend();
                         }}
-                        className="flex gap-2"
+                        className="flex items-center gap-3 bg-neutral-950/85 backdrop-blur-xl border border-white/14 rounded-full p-1.5 pl-4 shadow-[0_8px_32px_rgba(0,0,0,0.5)] focus-within:border-[oklch(0.90_0.22_128)] transition-colors"
                     >
                         <input
                             type="file"
@@ -522,25 +556,29 @@ export default function AssistantPage() {
                             onChange={handleImageSelect}
                             className="hidden"
                         />
-                        <Button
+                        <button
                             type="button"
-                            size="icon"
-                            variant="outline"
                             disabled={isLoading || !currentConversationId}
                             onClick={() => imageInputRef.current?.click()}
+                            className="text-neutral-500 hover:text-white cursor-pointer disabled:opacity-40 p-1 flex-shrink-0"
+                            title="Log meal photo"
                         >
-                            <Camera className="h-4 w-4" />
-                        </Button>
-                        <Input
+                            <Camera className="h-4.5 w-4.5" />
+                        </button>
+                        <input
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            placeholder="Type 'I ate an apple' or 'I did 10 pushups'..."
+                            placeholder="Ask anything or log details..."
                             disabled={isLoading || !currentConversationId}
-                            className="flex-1"
+                            className="flex-1 bg-transparent border-none text-xs font-mono-jetbrains placeholder-neutral-500 focus:outline-none text-white px-1"
                         />
-                        <Button type="submit" size="icon" disabled={isLoading || (!input.trim() && !pendingImage) || !currentConversationId}>
-                            <Send className="h-4 w-4" />
-                        </Button>
+                        <button 
+                            type="submit" 
+                            disabled={isLoading || (!input.trim() && !pendingImage) || !currentConversationId}
+                            className="w-8 h-8 rounded-full bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] flex items-center justify-center cursor-pointer disabled:opacity-40 flex-shrink-0 border-none hover:scale-105 transition-transform"
+                        >
+                            <Send className="h-3.5 w-3.5 fill-current" />
+                        </button>
                     </form>
                 </div>
             </div>

@@ -1,108 +1,22 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { 
+  TrendingUp, 
+  Search, 
+  Zap, 
+  Calendar, 
+  Activity, 
+  Flame,
+  Award,
+  ChevronDown
+} from "lucide-react";
 import { storage, Workout, Meal, UserProfile } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
-import {
-    BarChart,
-    Bar,
-    LineChart,
-    Line,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ReferenceLine,
-    ResponsiveContainer,
-} from "recharts";
 
-type TimeRange = "1W" | "1M" | "3M" | "All";
+type TimeRange = "1W" | "1M" | "3M" | "6M" | "All";
 
-function computePRs(workouts: Workout[]): { exercise: string; weight: number; date: string }[] {
-    const prMap = new Map<string, { weight: number; date: string }>();
-    for (const workout of workouts) {
-        for (const exercise of workout.exercises) {
-            const maxSet = exercise.sets.reduce(
-                (best, set) => (set.weight > best ? set.weight : best),
-                0
-            );
-            if (maxSet > 0) {
-                const existing = prMap.get(exercise.name);
-                if (!existing || maxSet > existing.weight) {
-                    prMap.set(exercise.name, { weight: maxSet, date: workout.date });
-                }
-            }
-        }
-    }
-    return Array.from(prMap.entries())
-        .map(([exercise, { weight, date }]) => ({ exercise, weight, date }))
-        .sort((a, b) => b.weight - a.weight);
-}
-
-function computeWeeklyFrequency(workouts: Workout[]): { week: string; count: number }[] {
-    const weekMap = new Map<string, number>();
-    for (const workout of workouts) {
-        const d = new Date(workout.date);
-        // Get Monday of that week
-        const day = d.getDay();
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(d.setDate(diff));
-        const weekKey = monday.toISOString().split("T")[0];
-        weekMap.set(weekKey, (weekMap.get(weekKey) ?? 0) + 1);
-    }
-    return Array.from(weekMap.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([week, count]) => ({
-            week: new Date(week).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-            count,
-        }));
-}
-
-function computeStrengthProgression(
-    workouts: Workout[],
-    exercise: string
-): { date: string; weight: number }[] {
-    const result: { date: string; weight: number }[] = [];
-    for (const workout of workouts) {
-        for (const ex of workout.exercises) {
-            if (ex.name === exercise) {
-                const maxWeight = ex.sets.reduce(
-                    (best, set) => (set.weight > best ? set.weight : best),
-                    0
-                );
-                if (maxWeight > 0) {
-                    result.push({
-                        date: new Date(workout.date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                        }),
-                        weight: maxWeight,
-                    });
-                }
-            }
-        }
-    }
-    return result.sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function computeDailyCalories(meals: Meal[]): { date: string; calories: number }[] {
-    const dayMap = new Map<string, number>();
-    for (const meal of meals) {
-        const dateKey = meal.date.split("T")[0];
-        dayMap.set(dateKey, (dayMap.get(dateKey) ?? 0) + meal.calories);
-    }
-    return Array.from(dayMap.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([dateKey, calories]) => ({
-            date: new Date(dateKey).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-            }),
-            calories: Math.round(calories),
-        }));
-}
-
+// Compute Streaks
 function computeStreak(workouts: Workout[]): number {
     const days = new Set(workouts.map((w) => w.date.split("T")[0]));
     const sorted = Array.from(days).sort((a, b) => b.localeCompare(a));
@@ -119,18 +33,80 @@ function computeStreak(workouts: Workout[]): number {
             break;
         }
     }
-    // Check if streak includes today or yesterday
     const today = new Date().toISOString().split("T")[0];
     const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
     if (sorted[0] !== today && sorted[0] !== yesterday) return 0;
     return streak;
 }
 
+// Compute PRs per exercise (max weight lifted all-time)
+function computePRs(workouts: Workout[]): { exercise: string; weight: number; date: string; isFresh: boolean }[] {
+    const prMap = new Map<string, { weight: number; date: string }>();
+    
+    // Sort workouts chronologically to find progression and see which ones are fresh (e.g. within last 7 days)
+    const chronological = [...workouts].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    for (const workout of chronological) {
+        for (const exercise of workout.exercises) {
+            const maxSet = exercise.sets.reduce(
+                (best, set) => (set.completed && set.weight > best ? set.weight : best),
+                0
+            );
+            if (maxSet > 0) {
+                const existing = prMap.get(exercise.name.toUpperCase());
+                if (!existing || maxSet > existing.weight) {
+                    prMap.set(exercise.name.toUpperCase(), { weight: maxSet, date: workout.date });
+                }
+            }
+        }
+    }
+
+    const sevenDaysAgo = Date.now() - 7 * 86400000;
+
+    return Array.from(prMap.entries())
+        .map(([exercise, { weight, date }]) => ({
+            exercise,
+            weight,
+            date,
+            isFresh: new Date(date).getTime() >= sevenDaysAgo
+        }))
+        .sort((a, b) => b.weight - a.weight);
+}
+
+// Compute Strength progression history for a specific exercise
+function computeStrengthHistory(workouts: Workout[], exerciseName: string): { dateStr: string; weight: number; date: string }[] {
+    const history: { dateStr: string; weight: number; date: string }[] = [];
+    const targetName = exerciseName.trim().toLowerCase();
+
+    // Sort chronologically
+    const chronological = [...workouts].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    chronological.forEach(workout => {
+        workout.exercises.forEach(ex => {
+            if (ex.name.trim().toLowerCase() === targetName) {
+                const maxWeight = ex.sets.reduce((best, s) => (s.completed && s.weight > best ? s.weight : best), 0);
+                if (maxWeight > 0) {
+                    const dateObj = new Date(workout.date);
+                    const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+                    history.push({
+                        dateStr: `${months[dateObj.getMonth()]} ${dateObj.getDate()}`,
+                        weight: maxWeight,
+                        date: workout.date
+                    });
+                }
+            }
+        });
+    });
+
+    return history;
+}
+
+// Filter data by time range
 function filterByRange<T extends { date: string }>(items: T[], range: TimeRange): T[] {
     if (range === "All") return items;
     const now = Date.now();
-    const ms = range === "1W" ? 7 : range === "1M" ? 30 : 90;
-    const cutoff = now - ms * 86400000;
+    const days = range === "1W" ? 7 : range === "1M" ? 30 : range === "3M" ? 90 : 180;
+    const cutoff = now - days * 86400000;
     return items.filter((item) => new Date(item.date).getTime() >= cutoff);
 }
 
@@ -138,9 +114,9 @@ export default function ProgressPage() {
     const { user } = useAuth();
     const [workouts, setWorkouts] = useState<Workout[]>([]);
     const [meals, setMeals] = useState<Meal[]>([]);
-    const [profile, setProfile] = useState<UserProfile | null>(null);
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
-    const [timeRange, setTimeRange] = useState<TimeRange>("1M");
+    const [timeRange, setTimeRange] = useState<TimeRange>("3M");
     const [selectedExercise, setSelectedExercise] = useState<string>("");
 
     useEffect(() => {
@@ -153,265 +129,306 @@ export default function ProgressPage() {
             ]);
             setWorkouts(w);
             setMeals(m);
-            setProfile(p);
+            setUserProfile(p);
             setLoading(false);
         };
         load();
     }, [user]);
 
-    const filteredWorkouts = useMemo(
-        () => filterByRange(workouts, timeRange),
-        [workouts, timeRange]
-    );
-
-    const filteredMeals = useMemo(
-        () => filterByRange(meals, timeRange),
-        [meals, timeRange]
-    );
-
-    const prs = useMemo(() => computePRs(workouts), [workouts]);
-    const weeklyFrequency = useMemo(
-        () => computeWeeklyFrequency(filteredWorkouts),
-        [filteredWorkouts]
-    );
-    const dailyCalories = useMemo(
-        () => computeDailyCalories(filteredMeals),
-        [filteredMeals]
-    );
-    const streak = useMemo(() => computeStreak(workouts), [workouts]);
-
+    // Active Exercise List derived from workouts
     const exerciseNames = useMemo(() => {
         const names = new Set<string>();
-        for (const w of workouts) {
-            for (const e of w.exercises) names.add(e.name);
-        }
+        workouts.forEach(w => w.exercises.forEach(e => names.add(e.name.toUpperCase())));
         return Array.from(names).sort();
     }, [workouts]);
 
-    // Auto-select first exercise
+    // Default select first exercise
     useEffect(() => {
         if (exerciseNames.length > 0 && !selectedExercise) {
             setSelectedExercise(exerciseNames[0]);
         }
     }, [exerciseNames, selectedExercise]);
 
-    const strengthProgression = useMemo(
-        () => (selectedExercise ? computeStrengthProgression(filteredWorkouts, selectedExercise) : []),
-        [filteredWorkouts, selectedExercise]
-    );
+    // Filter workouts/meals by range
+    const filteredWorkouts = useMemo(() => filterByRange(workouts, timeRange), [workouts, timeRange]);
 
-    const totalWorkouts = filteredWorkouts.length;
-    const avgPerWeek =
-        weeklyFrequency.length > 0
-            ? (totalWorkouts / weeklyFrequency.length).toFixed(1)
-            : "0";
-    const bestPR = prs.length > 0 ? `${prs[0].weight}kg` : "—";
+    // Stats calculations
+    const streak = useMemo(() => computeStreak(workouts), [workouts]);
+    const totalSessions = filteredWorkouts.length;
+    
+    const avgSessionsPerWeek = useMemo(() => {
+        if (filteredWorkouts.length === 0) return "0.0";
+        const dates = filteredWorkouts.map(w => new Date(w.date).getTime());
+        const maxDate = Math.max(...dates);
+        const minDate = Math.min(...dates);
+        const diffMs = maxDate - minDate;
+        const diffWeeks = Math.max(1, Math.ceil(diffMs / (7 * 86400000)));
+        return (filteredWorkouts.length / diffWeeks).toFixed(1);
+    }, [filteredWorkouts]);
 
-    const ranges: TimeRange[] = ["1W", "1M", "3M", "All"];
+    const totalVolumeTonnes = useMemo(() => {
+        const totalKg = filteredWorkouts.reduce((sum, w) => {
+            return sum + w.exercises.reduce((exSum, ex) => {
+                return exSum + ex.sets.reduce((setSum, s) => setSum + (s.completed ? s.weight * s.reps : 0), 0);
+            }, 0);
+        }, 0);
+        return (totalKg / 1000).toFixed(0);
+    }, [filteredWorkouts]);
+
+    const prs = useMemo(() => computePRs(workouts), [workouts]);
+
+    const strengthProgression = useMemo(() => {
+        if (!selectedExercise) return [];
+        return computeStrengthHistory(filteredWorkouts, selectedExercise);
+    }, [filteredWorkouts, selectedExercise]);
+
+    // Calculate dynamic 1RM Estimate path for SVG
+    const chartData = useMemo(() => {
+        if (strengthProgression.length < 2) return null;
+        
+        const w = 358;
+        const h = 140;
+        const weights = strengthProgression.map(d => d.weight);
+        const max = Math.max(...weights) * 1.05;
+        const min = Math.max(0, Math.min(...weights) * 0.95);
+        const range = max - min || 1;
+
+        const pts = strengthProgression.map((p, i) => [
+            (i / (strengthProgression.length - 1)) * w,
+            h - ((p.weight - min) / range) * h
+        ]);
+
+        const linePath = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+        const fillPath = linePath + ` L ${w} ${h} L 0 ${h} Z`;
+
+        // Get 3 grid line height levels
+        const gridLines = [0.25, 0.5, 0.75].map(p => p * h);
+
+        return {
+            pts,
+            linePath,
+            fillPath,
+            gridLines,
+            maxWeight: Math.max(...weights),
+            minWeight: Math.min(...weights)
+        };
+    }, [strengthProgression]);
+
+    // Calculate percentage increase
+    const percentIncrease = useMemo(() => {
+        if (strengthProgression.length < 2) return "0";
+        const first = strengthProgression[0].weight;
+        const last = strengthProgression[strengthProgression.length - 1].weight;
+        const diff = last - first;
+        return ((diff / first) * 100).toFixed(1);
+    }, [strengthProgression]);
 
     if (loading) {
         return (
-            <div className="p-4 pb-24 flex items-center justify-center min-h-[60vh]">
-                <p className="text-muted-foreground">Loading...</p>
+            <div className="flex items-center justify-center h-screen bg-[#0d0d0d] text-neutral-400">
+                <div className="font-mono-jetbrains text-sm">LOADING PERFORMANCE METRICS...</div>
             </div>
         );
     }
 
+    const ranges: TimeRange[] = ["1W", "1M", "3M", "6M", "All"];
+
     return (
-        <div className="p-4 pb-24 space-y-6">
-            <h1 className="text-2xl font-bold">Progress</h1>
+        <div className="min-h-screen bg-[#0d0d0d] text-white bg-glow-lime pb-32">
+            <div className="max-w-md mx-auto px-6 pt-16">
+                
+                {/* Header */}
+                <header className="mb-6">
+                    <div className="text-[10px] uppercase font-mono-jetbrains tracking-[0.16em] text-neutral-500 mb-1">
+                        Performance
+                    </div>
+                    <h1 className="text-3xl font-medium tracking-tight">Trends</h1>
+                </header>
 
-            {/* Time range selector */}
-            <div className="flex gap-2">
-                {ranges.map((r) => (
-                    <button
-                        key={r}
-                        onClick={() => setTimeRange(r)}
-                        className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                            timeRange === r
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted text-muted-foreground hover:text-foreground"
-                        }`}
-                    >
-                        {r}
-                    </button>
-                ))}
-            </div>
+                {/* Range Chips */}
+                <div className="flex gap-1.5 mb-6 overflow-x-auto scrollbar-hide py-1">
+                    {ranges.map((r) => (
+                        <button
+                            key={r}
+                            onClick={() => setTimeRange(r)}
+                            className={`px-3 py-1 font-mono-jetbrains text-[10px] tracking-wider uppercase transition-colors cursor-pointer border rounded-none ${
+                                timeRange === r 
+                                ? "bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] border-[oklch(0.90_0.22_128)] font-semibold" 
+                                : "bg-neutral-950/20 text-neutral-400 border-white/8 hover:text-white"
+                            }`}
+                        >
+                            {r}
+                        </button>
+                    ))}
+                </div>
 
-            {/* Summary cards */}
-            <div className="grid grid-cols-2 gap-3">
-                <Card>
-                    <CardContent className="pt-4">
-                        <p className="text-xs text-muted-foreground">Workouts</p>
-                        <p className="text-2xl font-bold text-primary">{totalWorkouts}</p>
-                        <p className="text-xs text-muted-foreground">this period</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-4">
-                        <p className="text-xs text-muted-foreground">Avg / Week</p>
-                        <p className="text-2xl font-bold text-primary">{avgPerWeek}</p>
-                        <p className="text-xs text-muted-foreground">workouts</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-4">
-                        <p className="text-xs text-muted-foreground">Streak</p>
-                        <p className="text-2xl font-bold text-primary">{streak}</p>
-                        <p className="text-xs text-muted-foreground">days</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-4">
-                        <p className="text-xs text-muted-foreground">Best PR</p>
-                        <p className="text-2xl font-bold text-primary">{bestPR}</p>
-                        <p className="text-xs text-muted-foreground truncate">{prs[0]?.exercise ?? "—"}</p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Workout Frequency */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Workout Frequency</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {weeklyFrequency.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-6">
-                            No workout data for this period.
-                        </p>
-                    ) : (
-                        <ResponsiveContainer width="100%" height={180}>
-                            <BarChart data={weeklyFrequency} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                <XAxis dataKey="week" tick={{ fontSize: 11 }} />
-                                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                                <Tooltip />
-                                <Bar dataKey="count" name="Workouts" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Personal Records */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Personal Records</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {prs.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-6">
-                            Log workouts with weights to see your PRs.
-                        </p>
-                    ) : (
-                        <div className="space-y-2">
-                            {prs.map((pr) => (
-                                <div
-                                    key={pr.exercise}
-                                    className="flex items-center justify-between py-2 border-b last:border-0"
-                                >
-                                    <span className="text-sm font-medium truncate max-w-[60%]">{pr.exercise}</span>
-                                    <div className="text-right">
-                                        <span className="text-sm font-bold text-primary">{pr.weight} kg</span>
-                                        <p className="text-xs text-muted-foreground">
-                                            {new Date(pr.date).toLocaleDateString("en-US", {
-                                                month: "short",
-                                                day: "numeric",
-                                            })}
-                                        </p>
-                                    </div>
+                {/* Hero 1RM Strength Progression Chart */}
+                <section className="border border-white/8 bg-neutral-950/40 p-4 mb-6 relative">
+                    <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[oklch(0.90_0.22_128)]/20 to-transparent" />
+                    
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <div className="font-mono-jetbrains text-[9px] text-neutral-500 tracking-[0.12em] uppercase">
+                                Est. Max Lift progression
+                            </div>
+                            <div className="flex items-baseline gap-2.5 mt-2">
+                                <div className="font-mono-jetbrains text-3xl font-medium text-white leading-none">
+                                    {strengthProgression.length > 0 ? strengthProgression[strengthProgression.length - 1].weight : "—"}
+                                    <span className="text-neutral-500 text-xs ml-0.5 font-normal">kg</span>
                                 </div>
-                            ))}
+                                {parseFloat(percentIncrease) !== 0 && (
+                                    <div className="font-mono-jetbrains text-[9px] text-[oklch(0.90_0.22_128)] font-bold uppercase leading-none">
+                                        {parseFloat(percentIncrease) > 0 ? "↑" : "↓"} {Math.abs(parseFloat(percentIncrease))}%
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Exercise Selector */}
+                        <div className="relative">
+                            {exerciseNames.length > 0 ? (
+                                <div className="flex items-center gap-1 bg-neutral-900 border border-white/8 px-2 py-1 select-none cursor-pointer">
+                                    <Search className="h-3 w-3 text-neutral-500" />
+                                    <select
+                                        value={selectedExercise}
+                                        onChange={(e) => setSelectedExercise(e.target.value)}
+                                        className="bg-transparent border-0 font-mono-jetbrains text-[9px] tracking-wider text-neutral-300 focus:outline-none cursor-pointer pr-4 appearance-none uppercase"
+                                    >
+                                        {exerciseNames.map(name => (
+                                            <option key={name} value={name} className="bg-[#141414] text-white">
+                                                {name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="h-2.5 w-2.5 text-neutral-500 absolute right-2 pointer-events-none" />
+                                </div>
+                            ) : (
+                                <div className="font-mono-jetbrains text-[8px] text-neutral-500">NO DATA</div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Pure Inline SVG Line Chart */}
+                    <div className="py-2">
+                        {chartData ? (
+                            <>
+                                <svg width="100%" height="140" viewBox="0 0 358 140" preserveAspectRatio="none" className="block">
+                                    <defs>
+                                        <linearGradient id="chartGlow" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stopColor="oklch(0.90 0.22 128)" stopOpacity="0.2" />
+                                            <stop offset="100%" stopColor="oklch(0.90 0.22 128)" stopOpacity="0" />
+                                        </linearGradient>
+                                    </defs>
+                                    
+                                    {/* Gridlines */}
+                                    {chartData.gridLines.map((y, idx) => (
+                                        <line key={idx} x1="0" y1={y} x2="358" y2={y} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+                                    ))}
+                                    
+                                    {/* Area Fill */}
+                                    <path d={chartData.fillPath} fill="url(#chartGlow)" />
+                                    
+                                    {/* Stroke Path */}
+                                    <path d={chartData.linePath} stroke="oklch(0.90 0.22 128)" strokeWidth="1.5" fill="none" />
+                                    
+                                    {/* Highlight Endpoint dot */}
+                                    <circle 
+                                        cx={chartData.pts[chartData.pts.length - 1][0]} 
+                                        cy={chartData.pts[chartData.pts.length - 1][1]} 
+                                        r="3" 
+                                        fill="oklch(0.90 0.22 128)" 
+                                    />
+                                </svg>
+                                
+                                {/* Chart X-axis labels */}
+                                <div className="flex justify-between font-mono-jetbrains text-[8px] text-neutral-500 tracking-wider mt-2.5">
+                                    <span>{strengthProgression[0].dateStr}</span>
+                                    <span>{strengthProgression[Math.floor(strengthProgression.length / 2)].dateStr}</span>
+                                    <span>{strengthProgression[strengthProgression.length - 1].dateStr}</span>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="h-[140px] flex items-center justify-center border border-dashed border-white/8 bg-neutral-950/20">
+                                <p className="font-mono-jetbrains text-[9px] uppercase tracking-widest text-neutral-500 text-center px-4 leading-relaxed">
+                                    Log at least 2 sessions with {selectedExercise || "this exercise"} to render progression.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </section>
+
+                {/* Dense Grid stats dashboard */}
+                <section className="grid grid-cols-2 gap-0 border border-white/8 bg-neutral-950/40 mb-6">
+                    {[
+                        ["Sessions", totalSessions, "this period"],
+                        ["Avg / wk", avgSessionsPerWeek, "frequency"],
+                        ["Streak", streak, "days consecutive"],
+                        ["Volume", `${totalVolumeTonnes}t`, "tonnes lifted"]
+                    ].map(([label, val, unit], idx) => (
+                        <div 
+                            key={idx} 
+                            className={`p-4 ${idx % 2 === 0 ? "border-r border-white/8" : ""} ${
+                                idx < 2 ? "border-b border-white/8" : ""
+                            }`}
+                        >
+                            <div className="font-mono-jetbrains text-[9px] uppercase tracking-wider text-neutral-500">
+                                {label}
+                            </div>
+                            <div className="font-mono-jetbrains text-2xl font-semibold text-white mt-1.5 leading-none">
+                                {val}
+                            </div>
+                            <div className="font-mono-jetbrains text-[8px] text-neutral-500 tracking-wider mt-1.5 uppercase leading-none">
+                                {unit}
+                            </div>
+                        </div>
+                    ))}
+                </section>
+
+                {/* PR Leaderboard */}
+                <section className="space-y-3">
+                    <div className="text-[10px] uppercase font-mono-jetbrains tracking-[0.16em] text-neutral-400 border-b border-white/8 pb-2">
+                        Personal Records
+                    </div>
+                    
+                    {prs.length === 0 ? (
+                        <div className="text-center py-8 border border-dashed border-white/8 bg-neutral-950/20">
+                            <Award className="h-6 w-6 mx-auto mb-2 text-neutral-600" />
+                            <p className="font-mono-jetbrains text-[9px] uppercase tracking-wider text-neutral-500">
+                                No records logged yet.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-white/8">
+                            {prs.map((pr) => {
+                                const dObj = new Date(pr.date);
+                                const dStr = `${String(dObj.getMonth() + 1).padStart(2, '0')}.${String(dObj.getDate()).padStart(2, '0')}`;
+                                return (
+                                    <div key={pr.exercise} className="py-3 flex justify-between items-center">
+                                        <div className="font-mono-jetbrains text-xs tracking-wider text-neutral-300 font-medium">
+                                            {pr.exercise}
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="font-mono-jetbrains text-base font-semibold flex items-center gap-1 text-white">
+                                                {pr.weight}
+                                                <span className="text-neutral-500 text-[10px] font-normal">kg</span>
+                                                {pr.isFresh && (
+                                                    <span className="inline-flex items-center px-1 py-0.5 bg-[oklch(0.90_0.22_128)] text-[oklch(0.20_0.06_128)] text-[7px] font-bold tracking-widest uppercase">
+                                                        <Zap className="h-2 w-2 fill-current" /> NEW
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="font-mono-jetbrains text-[9px] text-neutral-500 min-w-[36px] text-right">
+                                                {dStr}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
-                </CardContent>
-            </Card>
+                </section>
 
-            {/* Strength Progression */}
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle>Strength Progression</CardTitle>
-                    {exerciseNames.length > 0 && (
-                        <select
-                            value={selectedExercise}
-                            onChange={(e) => setSelectedExercise(e.target.value)}
-                            className="text-xs bg-muted text-foreground rounded px-2 py-1 border-0 outline-none max-w-[140px]"
-                        >
-                            {exerciseNames.map((name) => (
-                                <option key={name} value={name}>
-                                    {name}
-                                </option>
-                            ))}
-                        </select>
-                    )}
-                </CardHeader>
-                <CardContent>
-                    {strengthProgression.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-6">
-                            {exerciseNames.length === 0
-                                ? "Log workouts with exercises to track strength."
-                                : "No data for this exercise in the selected period."}
-                        </p>
-                    ) : (
-                        <ResponsiveContainer width="100%" height={180}>
-                            <LineChart data={strengthProgression} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                                <YAxis tick={{ fontSize: 11 }} />
-                                <Tooltip formatter={(value) => [`${value} kg`, "Weight"]} />
-                                <Line
-                                    type="monotone"
-                                    dataKey="weight"
-                                    stroke="hsl(var(--primary))"
-                                    strokeWidth={2}
-                                    dot={{ r: 4 }}
-                                    activeDot={{ r: 6 }}
-                                />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Calorie Trends */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Calorie Trends</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {dailyCalories.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-6">
-                            Log meals to see calorie trends.
-                        </p>
-                    ) : (
-                        <ResponsiveContainer width="100%" height={180}>
-                            <LineChart data={dailyCalories} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                                <YAxis tick={{ fontSize: 11 }} />
-                                <Tooltip formatter={(value) => [`${value} kcal`, "Calories"]} />
-                                {profile?.maxDailyCalories && (
-                                    <ReferenceLine
-                                        y={profile.maxDailyCalories}
-                                        stroke="hsl(var(--destructive))"
-                                        strokeDasharray="4 4"
-                                        label={{ value: "Goal", position: "insideTopRight", fontSize: 11 }}
-                                    />
-                                )}
-                                <Line
-                                    type="monotone"
-                                    dataKey="calories"
-                                    stroke="hsl(var(--primary))"
-                                    strokeWidth={2}
-                                    dot={{ r: 4 }}
-                                    activeDot={{ r: 6 }}
-                                />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    )}
-                </CardContent>
-            </Card>
+            </div>
         </div>
     );
 }
