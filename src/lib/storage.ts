@@ -131,7 +131,7 @@ export const storage = {
             if (id) {
                 // Update existing workout
                 const workoutDoc = doc(workoutsRef, id);
-                await updateDoc(workoutDoc, {
+                await setDoc(workoutDoc, {
                     ...workoutData,
                     date: Timestamp.fromDate(new Date(workout.date)),
                 });
@@ -226,7 +226,7 @@ export const storage = {
             if (id) {
                 // Update existing meal
                 const mealDoc = doc(mealsRef, id);
-                await updateDoc(mealDoc, {
+                await setDoc(mealDoc, {
                     ...mealData,
                     date: Timestamp.fromDate(new Date(meal.date)),
                 });
