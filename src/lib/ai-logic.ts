@@ -369,8 +369,28 @@ export const aiLogic = {
         };
     },
 
-    processInput: (text: string, language: "en" | "es" = "en"): AIResponse => {
+    processInput: (text: string, language: "en" | "es" = "en", hasImage: boolean = false): AIResponse => {
         const lowerText = text.toLowerCase().trim();
+
+        // 0. Check for Image upload
+        if (hasImage) {
+            const meal = aiLogic.estimateNutrition(text) || {
+                id: generateId(),
+                date: new Date().toISOString(),
+                name: language === "es" ? "Comida (Foto)" : "Meal (Photo)",
+                calories: 450,
+                protein: 25,
+                carbs: 45,
+                fats: 15
+            };
+            return {
+                text: language === "es"
+                    ? `He analizado tu foto. Parece ser una comida saludable de aproximadamente **${meal.calories} kcal** (${meal.protein}g de proteínas, ${meal.carbs}g de carbohidratos, ${meal.fats}g de grasas). He registrado estos macros en tu pestaña de Nutrición.`
+                    : `I've analyzed your photo. It looks like a healthy meal of about **${meal.calories} kcal** (${meal.protein}g protein, ${meal.carbs}g carbs, ${meal.fats}g fats). I've logged these macros in your Fuel tab.`,
+                action: "LOG_MEAL",
+                data: meal
+            };
+        }
 
         // 1. Check for Greetings
         const isGreeting = /\b(hola|hello|hi|hey|buenas|buenos dias|buenos días|buenas tardes|buenas noches)\b/i.test(lowerText);

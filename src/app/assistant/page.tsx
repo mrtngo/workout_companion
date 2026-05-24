@@ -294,7 +294,7 @@ export default function AssistantPage() {
             console.warn("API error or timeout, falling back to mock AI:", error);
 
             // Mock AI processing fallback
-            const mockResponse = aiLogic.processInput(userMessage.content, language);
+            const mockResponse = aiLogic.processInput(userMessage.content, language, !!userMessage.imageUrl);
 
             if (mockResponse.action === "LOG_MEAL" && mockResponse.data) {
                 await storage.saveMeal(user.uid, mockResponse.data);
