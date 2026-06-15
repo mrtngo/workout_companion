@@ -193,6 +193,82 @@ export default function AssistantPage() {
         e.target.value = "";
     };
 
+    const callGeminiClientSide = async (
+        userInput: string, 
+        capturedImage: any, 
+        recentWorkouts: any, 
+        recentMeals: any
+    ) => {
+        const directApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+        if (!directApiKey) throw new Error("NEXT_PUBLIC_GEMINI_API_KEY is not defined in env");
+
+        const nowStr = new Date().toISOString();
+        const targetLang = language === "es" ? "Spanish (ES)" : "English (EN)";
+        
+        const clientSystemPrompt = `You are a fitness, nutrition, and general assistant. Detect and log workouts/meals from user input, or answer questions naturally on any topic including training, meals, recovery, health, or general subjects. Respond ONLY with valid JSON, no extra text.
+
+Current date/time: ${nowStr}
+
+Respond in the user's preferred language: ${targetLang}.
+
+For MEALS: Use your nutrition knowledge to estimate realistic calories, protein, carbs, and fats based on the food and quantity mentioned. For example, 300g of beef ≈ 750 kcal, 69g protein, 0g carbs, 54g fats. Never return 0 for calories if the user mentioned a real food.
+
+For DATES: Extract date/time if mentioned (e.g. "yesterday", "2 hours ago", "at 2pm"). If no date mentioned, use exactly: "${nowStr}".
+
+Meal format: {"action":"LOG_MEAL","data":{"name":"Food description","date":"ISO8601","calories":750,"protein":69,"carbs":0,"fats":54},"text":"Logged: Food (750 kcal)"}
+Workout format: {"action":"LOG_WORKOUT","data":{"name":"Workout name","date":"ISO8601","exercises":[{"name":"Exercise","sets":[{"reps":10,"weight":60}]}]},"text":"Logged workout!"}
+Other responses (general conversation or QA): {"text":"Your response"}
+
+Always estimate nutrition realistically -- never return 0 calories for real food. Keep responses helpful, natural, and friendly.`;
+
+        const parts: Array<{ text: string } | { inlineData: any }> = [{ text: `${clientSystemPrompt}\nUser: ${userInput}` }];
+        if (capturedImage) {
+            parts.push({
+                inlineData: {
+                    mimeType: capturedImage.mimeType,
+                    data: capturedImage.base64
+                }
+            });
+        }
+
+        const geminiModel = "gemini-1.5-flash";
+        const directResponse = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${directApiKey}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{ parts }],
+                    safetySettings: [
+                      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                    ]
+                })
+            }
+        );
+
+        if (!directResponse.ok) {
+            throw new Error(`Direct Gemini API HTTP error: ${directResponse.status}`);
+        }
+
+        const data = await directResponse.json();
+        const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+        let jsonText = responseText.trim();
+        if (jsonText.startsWith("```json")) {
+            jsonText = jsonText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+        } else if (jsonText.startsWith("```")) {
+            jsonText = jsonText.replace(/^```\s*/, "").replace(/\s*```$/, "");
+        }
+
+        try {
+            return JSON.parse(jsonText);
+        } catch {
+            return { text: responseText };
+        }
+    };
+
     const handleSend = async () => {
         if (!input.trim() && !pendingImage) return;
         if (!user || !currentConversationId) return;
@@ -228,12 +304,19 @@ export default function AssistantPage() {
                 storage.getMeals(user.uid).catch(() => [])
             ]);
 
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000);
-            
-            let response: Response;
-            try {
-                response = await fetch(apiUrl("/api/chat"), {
+            const directApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+            const isDev = process.env.NODE_ENV === "development";
+
+            let data;
+            if (directApiKey && isDev) {
+                // Call Gemini directly in dev mode to guarantee model responses
+                data = await callGeminiClientSide(userMessage.content, capturedImage, recentWorkouts, recentMeals);
+            } else {
+                // Production Cloud Function call
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000);
+                
+                const response = await fetch(apiUrl("/api/chat"), {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -248,16 +331,12 @@ export default function AssistantPage() {
                     signal: controller.signal,
                 });
                 clearTimeout(timeoutId);
-            } catch (fetchError: any) {
-                clearTimeout(timeoutId);
-                throw fetchError;
-            }
 
-            if (!response.ok) {
-                throw new Error(`API error: ${response.status}`);
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+                data = await response.json();
             }
-
-            const data = await response.json();
 
             if (data.text?.includes("trouble processing")) {
                 throw new Error("API error processing text");
@@ -291,115 +370,12 @@ export default function AssistantPage() {
             setMessages((prev) => [...prev, aiMessage]);
             await saveMessageToFirestore(aiMessage);
         } catch (error: any) {
-            console.warn("API error or timeout, trying direct client-side Gemini call:", error);
-
-            const directApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-            if (directApiKey) {
-                try {
-                    const nowStr = new Date().toISOString();
-                    const targetLang = language === "es" ? "Spanish (ES)" : "English (EN)";
-                    const clientSystemPrompt = `You are a fitness, nutrition, and general assistant. Detect and log workouts/meals from user input, or answer questions naturally on any topic including training, meals, recovery, health, or general subjects. Respond ONLY with valid JSON, no extra text.
-
-Current date/time: ${nowStr}
-
-Respond in the user's preferred language: ${targetLang}.
-
-For MEALS: Use your nutrition knowledge to estimate realistic calories, protein, carbs, and fats based on the food and quantity mentioned. For example, 300g of beef ≈ 750 kcal, 69g protein, 0g carbs, 54g fats. Never return 0 for calories if the user mentioned a real food.
-
-For DATES: Extract date/time if mentioned (e.g. "yesterday", "2 hours ago", "at 2pm"). If no date mentioned, use exactly: "${nowStr}".
-
-Meal format: {"action":"LOG_MEAL","data":{"name":"Food description","date":"ISO8601","calories":750,"protein":69,"carbs":0,"fats":54},"text":"Logged: Food (750 kcal)"}
-Workout format: {"action":"LOG_WORKOUT","data":{"name":"Workout name","date":"ISO8601","exercises":[{"name":"Exercise","sets":[{"reps":10,"weight":60}]}]},"text":"Logged workout!"}
-Other responses (general conversation or QA): {"text":"Your response"}
-
-Always estimate nutrition realistically -- never return 0 calories for real food. Keep responses helpful, natural, and friendly.`;
-
-                    const parts: Array<{ text: string } | { inlineData: any }> = [{ text: `${clientSystemPrompt}\nUser: ${userMessage.content}` }];
-                    if (capturedImage) {
-                        parts.push({
-                            inlineData: {
-                                mimeType: capturedImage.mimeType,
-                                data: capturedImage.base64
-                            }
-                        });
-                    }
-
-                    const geminiModel = "gemini-1.5-flash";
-                    const directResponse = await fetch(
-                        `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${directApiKey}`,
-                        {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                contents: [{ parts }],
-                                safetySettings: [
-                                  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                                  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                                  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                                  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-                                ]
-                            })
-                        }
-                    );
-
-                    if (directResponse.ok) {
-                        const data = await directResponse.json();
-                        const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-                        let jsonText = responseText.trim();
-                        if (jsonText.startsWith("```json")) {
-                            jsonText = jsonText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-                        } else if (jsonText.startsWith("```")) {
-                            jsonText = jsonText.replace(/^```\s*/, "").replace(/\s*```$/, "");
-                        }
-
-                        const parsedData = JSON.parse(jsonText);
-                        
-                        if (parsedData.action === "LOG_MEAL" && parsedData.data) {
-                            const mealDate = parsedData.data.date || new Date().toISOString();
-                            await storage.saveMeal(user.uid, {
-                                id: "",
-                                date: mealDate,
-                                ...parsedData.data,
-                            });
-                        } else if (parsedData.action === "LOG_WORKOUT" && parsedData.data) {
-                            const workoutDate = parsedData.data.date || new Date().toISOString();
-                            await storage.saveWorkout(user.uid, {
-                                id: "",
-                                date: workoutDate,
-                                ...parsedData.data,
-                            });
-                        }
-
-                        const aiMessage: Message = {
-                            id: (Date.now() + 1).toString(),
-                            role: "assistant",
-                            content: parsedData.text || "I processed your request.",
-                            videoUrl,
-                            timestamp: new Date().toISOString()
-                        };
-
-                        setMessages((prev) => [...prev, aiMessage]);
-                        await saveMessageToFirestore(aiMessage);
-                        return; // Successfully handled by direct Gemini call!
-                    }
-                } catch (geminiError) {
-                    console.error("Direct client-side Gemini fallback failed:", geminiError);
-                }
-            }
-
-            // Fallback to basic mock AI if direct Gemini fails too
-            const mockResponse = aiLogic.processInput(userMessage.content, language, !!userMessage.imageUrl);
-
-            if (mockResponse.action === "LOG_MEAL" && mockResponse.data) {
-                await storage.saveMeal(user.uid, mockResponse.data);
-            } else if (mockResponse.action === "LOG_WORKOUT" && mockResponse.data) {
-                await storage.saveWorkout(user.uid, mockResponse.data);
-            }
+            console.error("Assistant chat error:", error);
 
             const errorMessage: Message = {
                 id: (Date.now() + 1).toString(),
                 role: "assistant",
-                content: mockResponse.text,
+                content: `Error: Unable to get response from Gemini. Please check your connection and try again. (Details: ${error.message || error})`,
                 videoUrl,
                 timestamp: new Date().toISOString()
             };
