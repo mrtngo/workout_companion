@@ -118,6 +118,28 @@ async function callGeminiWithRetry(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ parts }],
+            safetySettings: [
+              {
+                category: "HARM_CATEGORY_HARASSMENT",
+                threshold: "BLOCK_NONE",
+              },
+              {
+                category: "HARM_CATEGORY_HATE_SPEECH",
+                threshold: "BLOCK_NONE",
+              },
+              {
+                category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                threshold: "BLOCK_NONE",
+              },
+              {
+                category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+                threshold: "BLOCK_NONE",
+              },
+              {
+                category: "HARM_CATEGORY_CIVIC_INTEGRITY",
+                threshold: "BLOCK_NONE",
+              },
+            ],
           }),
         }
       );
@@ -170,7 +192,7 @@ async function processInput(
 {"action":"LOG_MEAL","data":{"name":"<description>","date":"${now}","calories":N,"protein":N,"carbs":N,"fats":N},"text":"Logged: <description> (N kcal)"}`;
   } else {
     const now = new Date().toISOString();
-    const systemPrompt = `You are a fitness and nutrition assistant. Detect and log workouts/meals from user input, or answer questions naturally about training, meals, recovery, or general health guidelines. Respond ONLY with valid JSON, no extra text.
+    const systemPrompt = `You are a fitness, nutrition, and general assistant. Detect and log workouts/meals from user input, or answer questions naturally on any topic including training, meals, recovery, health, or general subjects. Respond ONLY with valid JSON, no extra text.
 
 Current date/time: ${now}
 
