@@ -20,6 +20,11 @@ const FOOD_DATABASE: Record<string, { calories: number; protein: number; carbs: 
     pizza: { calories: 285, protein: 12, carbs: 36, fats: 10 },
     burger: { calories: 500, protein: 25, carbs: 40, fats: 25 },
     hamburguesa: { calories: 500, protein: 25, carbs: 40, fats: 25 },
+    beef: { calories: 250, protein: 26, carbs: 0, fats: 17 },
+    "lean beef": { calories: 200, protein: 29, carbs: 0, fats: 10 },
+    carne: { calories: 250, protein: 26, carbs: 0, fats: 17 },
+    "carne de res": { calories: 250, protein: 26, carbs: 0, fats: 17 },
+    steak: { calories: 270, protein: 25, carbs: 0, fats: 19 },
 };
 
 // Simple UUID generator
