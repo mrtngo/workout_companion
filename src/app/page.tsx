@@ -238,6 +238,10 @@ export default function Home() {
     ? (ultrahumanData.activity.activeMinutes / 10).toFixed(1) 
     : "11.2";
 
+  const hasRing = useMemo(() => {
+    return !!ultrahumanData && !ultrahumanData.error;
+  }, [ultrahumanData]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-background text-muted-foreground">
@@ -286,39 +290,41 @@ export default function Home() {
           {/* Header & Tabs */}
           <div className="flex justify-between items-center mb-4">
             <div className="font-mono-jetbrains text-[10px] tracking-[0.14em] text-muted-foreground uppercase">
-              {activeStatsTab === "activity" 
+              {activeStatsTab === "activity" || !hasRing
                 ? (language === "es" ? "ACTIVIDAD DIARIA" : "DAILY ACTIVITY") 
                 : t("home.readiness")}
             </div>
             
-            <div className="flex bg-secondary border border-border rounded-full p-0.5 font-mono-jetbrains text-[9px] font-semibold tracking-wider">
-              <button
-                onClick={() => setActiveStatsTab("activity")}
-                className={cn(
-                  "px-2.5 py-1 rounded-full uppercase transition-all cursor-pointer",
-                  activeStatsTab === "activity"
-                    ? "bg-primary text-primary-foreground shadow-sm font-bold"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {language === "es" ? "Actividad" : "Activity"}
-              </button>
-              <button
-                onClick={() => setActiveStatsTab("ring")}
-                className={cn(
-                  "px-2.5 py-1 rounded-full uppercase transition-all cursor-pointer flex items-center gap-1",
-                  activeStatsTab === "ring"
-                    ? "bg-primary text-primary-foreground shadow-sm font-bold"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <span className="w-1 h-1 rounded-full bg-current animate-pulse" />
-                {language === "es" ? "Anillo" : "Ring"}
-              </button>
-            </div>
+            {hasRing && (
+              <div className="flex bg-secondary border border-border rounded-full p-0.5 font-mono-jetbrains text-[9px] font-semibold tracking-wider">
+                <button
+                  onClick={() => setActiveStatsTab("activity")}
+                  className={cn(
+                    "px-2.5 py-1 rounded-full uppercase transition-all cursor-pointer",
+                    activeStatsTab === "activity"
+                      ? "bg-primary text-primary-foreground shadow-sm font-bold"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {language === "es" ? "Actividad" : "Activity"}
+                </button>
+                <button
+                  onClick={() => setActiveStatsTab("ring")}
+                  className={cn(
+                    "px-2.5 py-1 rounded-full uppercase transition-all cursor-pointer flex items-center gap-1",
+                    activeStatsTab === "ring"
+                      ? "bg-primary text-primary-foreground shadow-sm font-bold"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <span className="w-1 h-1 rounded-full bg-current animate-pulse" />
+                  {language === "es" ? "Anillo" : "Ring"}
+                </button>
+              </div>
+            )}
           </div>
 
-          {activeStatsTab === "activity" ? (
+          {activeStatsTab === "activity" || !hasRing ? (
             /* ACTIVITY STATS VIEW */
             <>
               <div className="flex items-end justify-between gap-4">
